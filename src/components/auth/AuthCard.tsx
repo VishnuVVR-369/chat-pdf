@@ -11,19 +11,19 @@ type Provider = "google" | "github";
 const copy = {
   "sign-in": {
     badge: "Welcome back",
-    title: "Sign in and pick up where you left off.",
+    title: "Sign in to your workspace.",
     description:
-      "Continue with Google or GitHub and head straight into your workspace.",
+      "Continue with Google or GitHub to pick up right where you left off.",
     primaryLabel: "Sign in with",
-    alternateLabel: "Need an account?",
+    alternateLabel: "Don't have an account?",
     alternateHref: "/sign-up",
     alternateCta: "Create one",
   },
   "sign-up": {
-    badge: "Create your account",
-    title: "Start your document workflow in one click.",
+    badge: "Get started",
+    title: "Create your account.",
     description:
-      "Use Google or GitHub to create your account and land directly in the dashboard.",
+      "One click with Google or GitHub and you're in — no forms, no password.",
     primaryLabel: "Continue with",
     alternateLabel: "Already have an account?",
     alternateHref: "/sign-in",
@@ -64,18 +64,21 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
   };
 
   return (
-    <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-white/70 bg-white/90 p-8 shadow-[0_24px_90px_-32px_rgba(17,24,39,0.45)] backdrop-blur">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 via-cyan-500 to-blue-600" />
+    <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-stone-800/80 bg-[#0c0c0c] p-8 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)]">
+      {/* Top accent line */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
+
       <div className="space-y-6">
         <div className="space-y-3">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-3 py-1 text-xs font-medium text-amber-400">
+            <span className="h-1 w-1 rounded-full bg-amber-400" />
             {content.badge}
-          </p>
+          </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
+            <h1 className="text-2xl font-bold tracking-tight text-stone-100">
               {content.title}
             </h1>
-            <p className="text-sm leading-6 text-slate-600">
+            <p className="text-sm leading-relaxed text-stone-500">
               {content.description}
             </p>
           </div>
@@ -99,20 +102,26 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
         </div>
 
         {error ? (
-          <p className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          <p className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-400">
             {error}
           </p>
         ) : null}
 
-        <div className="flex items-center gap-2 text-sm text-slate-600">
-          <span>{content.alternateLabel}</span>
-          <Link
-            className="font-semibold text-slate-950 underline decoration-slate-300 underline-offset-4 transition hover:decoration-slate-950"
-            href={content.alternateHref}
-          >
-            {content.alternateCta}
-          </Link>
+        <div className="border-t border-stone-800/60 pt-5">
+          <div className="flex items-center gap-1.5 text-sm text-stone-500">
+            <span>{content.alternateLabel}</span>
+            <Link
+              className="font-semibold text-amber-400 underline decoration-amber-500/30 underline-offset-4 transition hover:decoration-amber-400"
+              href={content.alternateHref}
+            >
+              {content.alternateCta}
+            </Link>
+          </div>
         </div>
+
+        <p className="text-[11px] leading-relaxed text-stone-700">
+          By continuing, you agree to our terms of service and privacy policy.
+        </p>
       </div>
     </div>
   );
@@ -133,7 +142,7 @@ function SocialButton({
 }) {
   return (
     <Button
-      className="h-13 w-full justify-start rounded-[1.4rem] border-slate-200 bg-white px-4 text-base text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+      className="h-12 w-full justify-start gap-3 rounded-xl border-stone-700/60 bg-stone-800/30 px-4 text-sm font-medium text-stone-200 shadow-none transition hover:border-stone-600 hover:bg-stone-800/60 disabled:opacity-40"
       disabled={disabled}
       onClick={onClick}
       size="lg"
@@ -141,7 +150,27 @@ function SocialButton({
       variant="outline"
     >
       {provider === "google" ? <GoogleMark /> : <GitHubMark />}
-      <span>{pending ? `${label}...` : label}</span>
+      <span className="flex-1 text-left">
+        {pending ? (
+          <span className="inline-flex items-center gap-2">
+            {label}
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-stone-500 border-t-amber-400" />
+          </span>
+        ) : (
+          label
+        )}
+      </span>
+      <svg
+        className="h-4 w-4 text-stone-600 transition group-hover/button:text-stone-400"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M5 12h14M12 5l7 7-7 7" />
+      </svg>
     </Button>
   );
 }
@@ -173,7 +202,7 @@ function GitHubMark() {
   return (
     <svg
       aria-hidden="true"
-      className="size-5 fill-current"
+      className="size-5 fill-stone-300"
       viewBox="0 0 24 24"
     >
       <path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.41-4.04-1.41-.55-1.4-1.34-1.77-1.34-1.77-1.1-.75.09-.73.09-.73 1.21.09 1.85 1.26 1.85 1.26 1.08 1.85 2.83 1.32 3.52 1 .11-.79.42-1.33.76-1.64-2.67-.3-5.48-1.34-5.48-5.97 0-1.32.47-2.39 1.25-3.24-.13-.3-.54-1.53.12-3.18 0 0 1.02-.33 3.35 1.24a11.64 11.64 0 0 1 6.1 0c2.32-1.57 3.34-1.24 3.34-1.24.67 1.65.26 2.88.13 3.18.78.85 1.24 1.92 1.24 3.24 0 4.64-2.81 5.66-5.49 5.96.43.37.82 1.11.82 2.24v3.32c0 .32.21.69.83.57A12 12 0 0 0 12 .5Z" />
