@@ -1,36 +1,125 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ChatPDF
 
-## Getting Started
+ChatPDF is a customer-facing web application for uploading PDFs and chatting with them through a Retrieval-Augmented Generation workflow. The system is designed to answer questions using only the contents of uploaded documents, with citations that point back to the original source pages.
 
-First, run the development server:
+## What the Project Does
+
+- Upload text-based and scanned PDFs
+- Process documents asynchronously into searchable chunks
+- Retrieve relevant context with hybrid search
+- Generate grounded answers with citations
+- Support single-document and multi-document chat
+- Open cited pages in a PDF viewer and highlight referenced content
+
+## Core Product Goals
+
+- Accurate answers grounded in uploaded documents
+- Clear citations for traceability
+- Streaming chat experience
+- Support for both standard PDFs and OCR-based scanned PDFs
+- Reliable behavior when evidence is weak or missing
+
+## Tech Stack
+
+### Frontend
+
+- Next.js App Router
+- React
+- Tailwind CSS
+- Vercel AI SDK
+
+### Backend
+
+- Convex for database, functions, and background jobs
+- Better Auth for authentication
+
+### AI and Processing
+
+- OpenAI for answer generation
+- Gemini for embeddings
+- `pdfjs-dist` for PDF parsing
+- `tesseract.js` for OCR
+
+### Analytics
+
+- PostHog
+
+## High-Level Architecture
+
+### Document flow
+
+1. A user uploads a PDF.
+2. The file and document metadata are stored.
+3. A background ingestion pipeline extracts text or runs OCR.
+4. The document is split into pages and chunks.
+5. Embeddings are generated and stored for retrieval.
+
+### Chat flow
+
+1. A user asks a question about one or more selected documents.
+2. The system runs hybrid retrieval over the indexed chunks.
+3. Relevant context is sent to the model.
+4. The answer is streamed back with citations.
+5. Citations link back to document pages and highlighted text when available.
+
+## Main Features
+
+- Google and GitHub authentication
+- Protected dashboard experience
+- PDF upload and document management
+- Async ingestion pipeline
+- Hybrid retrieval
+- Streaming RAG chat
+- Citation rendering
+- PDF page navigation and highlighting
+- PostHog event tracking
+
+## Environment Variables
+
+Copy `.env.example` to `.env.local` and provide values for:
+
+- `CONVEX_DEPLOYMENT`
+- `NEXT_PUBLIC_CONVEX_URL`
+- `NEXT_PUBLIC_CONVEX_SITE_URL`
+- `SITE_URL`
+- `NEXT_PUBLIC_SITE_URL`
+- `BETTER_AUTH_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GITHUB_CLIENT_ID`
+- `GITHUB_CLIENT_SECRET`
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `NEXT_PUBLIC_POSTHOG_KEY`
+- `NEXT_PUBLIC_POSTHOG_HOST`
+
+## Local Development
+
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Start Next.js:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Start Convex when backend development is needed:
 
-## Learn More
+```bash
+npx convex dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Run checks:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+pnpm lint
+pnpm build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+The project is configured for Vercel via [vercel.json](/Users/vishnu/Desktop/Coding/Projects/chat-pdf/vercel.json). Set the same environment variables in Vercel before deploying.
