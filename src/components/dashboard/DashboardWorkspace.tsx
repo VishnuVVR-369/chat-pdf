@@ -1,11 +1,9 @@
 "use client";
 
-import type { ChangeEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { inspectPdfFile } from "@/lib/pdf-client";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -14,18 +12,12 @@ import { PdfViewer } from "./PdfViewer";
 import { Sidebar } from "./Sidebar";
 import type { WorkspaceDocument } from "./Sidebar";
 import { UploadDropZone } from "./UploadDropZone";
+import { UploadModal } from "./UploadModal";
 
 type DashboardWorkspaceProps = {
   email: string | null | undefined;
   name: string | null | undefined;
   tokenIdentifier: string;
-};
-
-type PendingUpload = {
-  file: File;
-  message: string;
-  pageCount: number | null;
-  status: "checking" | "ready" | "rejected" | "server_check_required";
 };
 
 type MobileTab = "preview" | "chat";
@@ -35,7 +27,6 @@ export function DashboardWorkspace({
   name,
 }: DashboardWorkspaceProps) {
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const documents = useQuery(api.documents.listDocuments);
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const createDocument = useAction(api.documentUploads.createDocument);
@@ -43,10 +34,9 @@ export function DashboardWorkspace({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [dropZoneFile, setDropZoneFile] = useState<File | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<Id<"documents"> | null>(null);
-  const [uploadError, setUploadError] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("preview");
 
   const workspaceDocuments: WorkspaceDocument[] = useMemo(() => documents ?? [], [documents]);
@@ -73,88 +63,42 @@ export function DashboardWorkspace({
     }
   };
 
-  const handleFileSelect = async (file: File) => {
-    setUploadError(null);
+  const handleUploadFile = async (file: File): Promise<Id<"documents">> => {
+    const uploadUrl = await generateUploadUrl({});
+    const uploadResponse = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/pdf" },
+      body: file,
+    });
 
-    const looksLikePdf =
-      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+    if (!uploadResponse.ok) throw new Error("Upload rejected by storage.");
 
-    if (!looksLikePdf) {
-      setUploadError("Select a valid PDF file.");
-      return;
-    }
+    const body = (await uploadResponse.json()) as { storageId?: string };
+    if (!body.storageId) throw new Error("Storage did not return a storage id.");
 
-    setPendingUpload({ file, message: "Checking PDF...", pageCount: null, status: "checking" });
-
-    try {
-      const result = await inspectPdfFile(file);
-      if (result.status === "ready") {
-        setPendingUpload({ file, message: result.message, pageCount: result.pageCount, status: "ready" });
-        // Auto-upload when ready
-        await handleUploadFile(file);
-      } else if (result.status === "server_check_required") {
-        setPendingUpload({ file, message: result.message, pageCount: null, status: "server_check_required" });
-        await handleUploadFile(file);
-      } else {
-        setPendingUpload({ file, message: result.message, pageCount: result.pageCount ?? null, status: "rejected" });
-        setUploadError(result.message);
-      }
-    } catch (error) {
-      setPendingUpload(null);
-      setUploadError(error instanceof Error ? error.message : "PDF preflight failed.");
-    }
+    return createDocument({
+      filename: file.name,
+      storageId: body.storageId as Id<"_storage">,
+    });
   };
 
-  const handleUploadFile = async (file: File) => {
-    setIsUploading(true);
-    setUploadError(null);
-
-    try {
-      const uploadUrl = await generateUploadUrl({});
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type || "application/pdf" },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) throw new Error("Upload rejected by storage.");
-
-      const body = (await uploadResponse.json()) as { storageId?: string };
-      if (!body.storageId) throw new Error("Storage did not return a storage id.");
-
-      const documentId = await createDocument({
-        filename: file.name,
-        storageId: body.storageId as Id<"_storage">,
-      });
-
-      setPendingUpload(null);
-      setSelectedDocumentId(documentId);
-    } catch (error) {
-      setUploadError(error instanceof Error ? error.message : "Upload failed.");
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const handleFileInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    event.target.value = "";
-    await handleFileSelect(file);
-  };
-
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
+  const handleUploadClick = () => setIsUploadModalOpen(true);
 
   return (
     <main className="relative h-screen overflow-hidden bg-[#070707] text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
-      <input
-        ref={fileInputRef}
-        accept=".pdf,application/pdf"
-        className="sr-only"
-        onChange={handleFileInputChange}
-        type="file"
+      <UploadModal
+        isOpen={isUploadModalOpen}
+        initialFile={dropZoneFile}
+        onClose={() => {
+          setIsUploadModalOpen(false);
+          setDropZoneFile(null);
+        }}
+        onUpload={handleUploadFile}
+        onSuccess={(documentId) => {
+          setSelectedDocumentId(documentId);
+          setIsUploadModalOpen(false);
+          setDropZoneFile(null);
+        }}
       />
 
       <div className="flex h-full">
@@ -220,35 +164,6 @@ export function DashboardWorkspace({
             </span>
           </div>
 
-          {/* Upload status bar */}
-          {(isUploading || uploadError) && (
-            <div className={cn(
-              "flex items-center gap-3 px-4 py-2 text-sm",
-              uploadError
-                ? "border-b border-red-500/20 bg-red-500/[0.06] text-red-300"
-                : "border-b border-amber-500/20 bg-amber-500/[0.04] text-amber-300",
-            )}>
-              {isUploading && (
-                <>
-                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-stone-600 border-t-amber-400" />
-                  <span>Uploading PDF...</span>
-                </>
-              )}
-              {uploadError && (
-                <>
-                  <span>{uploadError}</span>
-                  <button
-                    className="ml-auto text-xs text-stone-400 hover:text-stone-200"
-                    onClick={() => setUploadError(null)}
-                    type="button"
-                  >
-                    Dismiss
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-
           {/* Content area */}
           {selectedDocument ? (
             <>
@@ -307,7 +222,10 @@ export function DashboardWorkspace({
               </div>
             </>
           ) : (
-            <UploadDropZone onFileSelect={handleFileSelect} />
+            <UploadDropZone onFileSelect={(file) => {
+              setDropZoneFile(file);
+              setIsUploadModalOpen(true);
+            }} />
           )}
         </div>
       </div>
