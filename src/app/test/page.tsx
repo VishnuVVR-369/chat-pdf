@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace";
 import { fetchAuthQuery, isAuthenticated } from "@/lib/auth-server";
+import { DashboardPanel } from "@/components/dashboard/DashboardPanel";
 import { api } from "../../../convex/_generated/api";
 
 export default async function DashboardPage() {
@@ -15,7 +15,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <DashboardWorkspace
+    <DashboardPanel
       email={user.email}
       name={user.name}
       tokenIdentifier={user.tokenIdentifier}
