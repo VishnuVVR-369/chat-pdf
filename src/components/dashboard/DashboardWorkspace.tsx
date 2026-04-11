@@ -255,7 +255,7 @@ export function DashboardWorkspace({
               {/* Desktop: side-by-side */}
               <div className="hidden flex-1 lg:flex">
                 <div className="flex-1 border-r border-stone-800/60">
-                  <PdfViewer document={selectedDocument} />
+                  <PdfViewer key={selectedDocument._id} document={selectedDocument} />
                 </div>
                 <div className="w-[420px] shrink-0 xl:w-[480px]">
                   <ChatPanel document={selectedDocument} />
@@ -291,11 +291,18 @@ export function DashboardWorkspace({
                   </button>
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  {mobileTab === "preview" ? (
-                    <PdfViewer document={selectedDocument} />
-                  ) : (
+                  <div
+                    aria-hidden={mobileTab !== "preview"}
+                    className={cn("h-full", mobileTab === "preview" ? "block" : "hidden")}
+                  >
+                    <PdfViewer key={selectedDocument._id} document={selectedDocument} />
+                  </div>
+                  <div
+                    aria-hidden={mobileTab !== "chat"}
+                    className={cn("h-full", mobileTab === "chat" ? "block" : "hidden")}
+                  >
                     <ChatPanel document={selectedDocument} />
-                  )}
+                  </div>
                 </div>
               </div>
             </>

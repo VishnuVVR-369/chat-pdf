@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/types/src/pdf";
 
 type PdfPreviewProps = {
   file?: File | null;
@@ -31,13 +32,21 @@ export function PdfPreview({
   url,
 }: PdfPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pageCountChangeRef = useRef(onPageCountChange);
   const [error, setError] = useState<string | null>(null);
-  const [isRendering, setIsRendering] = useState(false);
+  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+  const [isRenderingPage, setIsRenderingPage] = useState(false);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+
+  useEffect(() => {
+    pageCountChangeRef.current = onPageCountChange;
+  }, [onPageCountChange]);
 
   useEffect(() => {
     if (!file && !url) {
+      setPdfDocument(null);
       setError(null);
-      setIsRendering(false);
+      setIsLoadingDocument(false);
       return;
     }
 
@@ -46,8 +55,10 @@ export function PdfPreview({
     let cancelled = false;
     let loadingTask: ReturnType<typeof getDocument> | null = null;
 
-    async function renderPage() {
-      setIsRendering(true);
+    async function loadDocument() {
+      setPdfDocument(null);
+      setIsRenderingPage(false);
+      setIsLoadingDocument(true);
       setError(null);
 
       try {
@@ -62,16 +73,58 @@ export function PdfPreview({
           useWorkerFetch: false,
         });
 
-        const pdfDocument = await loadingTask.promise;
+        const nextDocument = await loadingTask.promise;
 
         if (cancelled) {
+          await nextDocument.destroy();
           return;
         }
 
-        onPageCountChange?.(pdfDocument.numPages);
+        pageCountChangeRef.current?.(nextDocument.numPages);
+        setPdfDocument(nextDocument);
+      } catch (renderError) {
+        if (!cancelled) {
+          setPdfDocument(null);
+          setError(
+            renderError instanceof Error
+              ? renderError.message
+              : "Could not render this PDF page.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDocument(false);
+        }
+      }
+    }
 
-        const safePageNumber = Math.min(Math.max(pageNumber, 1), pdfDocument.numPages);
-        const pdfPage = await pdfDocument.getPage(safePageNumber);
+    void loadDocument();
+
+    return () => {
+      cancelled = true;
+      if (loadingTask) {
+        void loadingTask.destroy();
+      }
+    };
+  }, [file, url]);
+
+  useEffect(() => {
+    if (!pdfDocument) {
+      setIsRenderingPage(false);
+      return;
+    }
+
+    const activeDocument = pdfDocument;
+    let cancelled = false;
+    let renderTask: RenderTask | null = null;
+
+    async function renderPage() {
+      setIsRenderingPage(true);
+      setError(null);
+
+      try {
+        const safePageNumber = Math.min(Math.max(pageNumber, 1), activeDocument.numPages);
+        const pdfPage = await activeDocument.getPage(safePageNumber);
 
         if (cancelled) {
           return;
@@ -97,11 +150,12 @@ export function PdfPreview({
         canvas.style.height = "auto";
 
         context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-        await pdfPage.render({
+        renderTask = pdfPage.render({
           canvas,
           canvasContext: context,
           viewport,
-        }).promise;
+        });
+        await renderTask.promise;
       } catch (renderError) {
         if (!cancelled) {
           setError(
@@ -112,7 +166,7 @@ export function PdfPreview({
         }
       } finally {
         if (!cancelled) {
-          setIsRendering(false);
+          setIsRenderingPage(false);
         }
       }
     }
@@ -121,11 +175,11 @@ export function PdfPreview({
 
     return () => {
       cancelled = true;
-      if (loadingTask) {
-        void loadingTask.destroy();
-      }
+      renderTask?.cancel();
     };
-  }, [file, onPageCountChange, pageNumber, url]);
+  }, [pageNumber, pdfDocument]);
+
+  const isRendering = isLoadingDocument || isRenderingPage;
 
   if (error) {
     return (
