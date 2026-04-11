@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -45,6 +45,16 @@ export function Sidebar({
   onUploadClick,
   selectedDocumentId,
 }: SidebarProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredDocuments = normalizedSearchQuery
+    ? documents.filter((document) => {
+        const searchableText =
+          `${document.title} ${document.originalFilename}`.toLowerCase();
+        return searchableText.includes(normalizedSearchQuery);
+      })
+    : documents;
+
   return (
     <aside
       className={cn(
@@ -103,16 +113,46 @@ export function Sidebar({
       {/* Document list */}
       <div className="mt-4 flex-1 overflow-y-auto px-2">
         {!collapsed && (
-          <p className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wider text-stone-500">
-            Documents
-            {documents.length > 0 && (
-              <span className="ml-1.5 text-stone-600">{documents.length}</span>
-            )}
-          </p>
+          <>
+            <div className="mb-2 flex items-center justify-between gap-2 px-2">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-stone-500">
+                Documents
+                {documents.length > 0 && (
+                  <span className="ml-1.5 text-stone-600">
+                    {filteredDocuments.length === documents.length
+                      ? documents.length
+                      : `${filteredDocuments.length}/${documents.length}`}
+                  </span>
+                )}
+              </p>
+            </div>
+
+            <label className="relative mb-3 block px-1">
+              <span className="sr-only">Search PDFs</span>
+              <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-500" />
+              <input
+                className="h-9 w-full rounded-xl border border-stone-800/80 bg-stone-950/90 pl-9 pr-9 text-sm text-stone-100 outline-none transition placeholder:text-stone-600 focus:border-amber-500/50 focus:bg-stone-950"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search PDFs"
+                type="search"
+                value={searchQuery}
+              />
+              {searchQuery.length > 0 && (
+                <button
+                  aria-label="Clear PDF search"
+                  className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-800/70 hover:text-stone-200"
+                  onClick={() => setSearchQuery("")}
+                  type="button"
+                >
+                  <ClearIcon />
+                </button>
+              )}
+            </label>
+          </>
         )}
 
         <div className="space-y-0.5">
-          {documents.map((doc) => (
+          {filteredDocuments.map((doc) => (
             <button
               key={doc._id}
               className={cn(
@@ -153,6 +193,12 @@ export function Sidebar({
         {documents.length === 0 && !collapsed && (
           <p className="px-2 py-4 text-center text-sm text-stone-600">
             No documents yet
+          </p>
+        )}
+
+        {documents.length > 0 && filteredDocuments.length === 0 && !collapsed && (
+          <p className="px-2 py-4 text-center text-sm text-stone-600">
+            No PDFs match &quot;{searchQuery.trim()}&quot;
           </p>
         )}
       </div>
@@ -263,6 +309,24 @@ function LogoutIcon() {
       <path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
       <path d="M10 17l5-5-5-5" />
       <path d="M15 12H3" />
+    </svg>
+  );
+}
+
+function SearchIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </svg>
   );
 }
