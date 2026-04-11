@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 
 type LandingPageProps = {
@@ -110,6 +111,7 @@ const steps = [
 
 export function LandingPage({ authenticated }: LandingPageProps) {
   const shouldReduceMotion = useReducedMotion();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
     <main className="relative min-h-screen overflow-x-clip bg-[#070707] text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
@@ -149,7 +151,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
             <span className="text-lg font-semibold tracking-tight">ChatPDF</span>
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden items-center gap-3 sm:flex">
             <Button
               asChild
               variant="ghost"
@@ -164,9 +166,55 @@ export function LandingPage({ authenticated }: LandingPageProps) {
               <Link href="/sign-up">Get started</Link>
             </Button>
           </div>
+
+          <button
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-800 bg-stone-900/50 text-stone-400 transition-colors hover:bg-stone-800 hover:text-stone-200 sm:hidden"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {mobileMenuOpen ? (
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="4" y1="8" x2="20" y2="8" />
+                <line x1="4" y1="16" x2="20" y2="16" />
+              </svg>
+            )}
+          </button>
         </motion.nav>
 
-        <section className="pb-18 pt-20 text-center sm:pb-22 sm:pt-24">
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <motion.div
+              className="overflow-hidden rounded-2xl border border-stone-800/80 bg-[#0c0c0c]/95 backdrop-blur-md sm:hidden"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            >
+              <div className="flex flex-col gap-2 p-4">
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="h-12 w-full justify-center rounded-xl text-stone-300 hover:bg-stone-800/60 hover:text-stone-100"
+                >
+                  <Link href="/sign-in" onClick={() => setMobileMenuOpen(false)}>Sign in</Link>
+                </Button>
+                <Button
+                  asChild
+                  className="h-12 w-full justify-center rounded-xl bg-amber-500 font-semibold text-[#070707] hover:bg-amber-400"
+                >
+                  <Link href="/sign-up" onClick={() => setMobileMenuOpen(false)}>Get started</Link>
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <section className="pb-14 pt-14 text-center sm:pb-18 sm:pt-20 md:pb-22 md:pt-24">
           <FadeUp className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 text-sm text-amber-400">
             <motion.span
               className="h-1.5 w-1.5 rounded-full bg-amber-400"
@@ -186,7 +234,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
 
           <FadeUp
             delay={0.08}
-            className="mx-auto max-w-4xl text-5xl font-bold leading-[1.03] tracking-[-0.04em] sm:text-7xl"
+            className="mx-auto max-w-4xl text-[2.5rem] font-bold leading-[1.08] tracking-[-0.03em] sm:text-5xl md:text-7xl md:leading-[1.03]"
           >
             Your PDFs have answers.
             <br />
@@ -197,7 +245,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
 
           <FadeUp
             delay={0.16}
-            className="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-stone-400"
+            className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-stone-400 sm:mt-7 sm:text-lg"
           >
             Upload any PDF, from research papers to contracts and manuals, and
             get instant answers grounded in the document itself. Every response
@@ -206,12 +254,12 @@ export function LandingPage({ authenticated }: LandingPageProps) {
 
           <FadeUp
             delay={0.24}
-            className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
+            className="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row"
           >
             <Button
               asChild
               size="lg"
-              className="h-12 rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] shadow-[0_25px_60px_-24px_rgba(245,158,11,0.95)] hover:bg-amber-400"
+              className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] shadow-[0_25px_60px_-24px_rgba(245,158,11,0.95)] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
             >
               <Link href={authenticated ? "/dashboard" : "/sign-up"}>
                 {authenticated ? "Open Dashboard" : "Start for free"}
@@ -221,7 +269,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
               asChild
               size="lg"
               variant="outline"
-              className="h-12 rounded-full border-stone-700 bg-stone-900/35 px-8 text-base text-stone-300 hover:bg-stone-800/60 hover:text-stone-100"
+              className="h-12 w-full rounded-full border-stone-700 bg-stone-900/35 px-8 text-base text-stone-300 hover:bg-stone-800/60 hover:text-stone-100 sm:w-auto"
             >
               <Link href="/sign-in">Sign in</Link>
             </Button>
@@ -234,7 +282,30 @@ export function LandingPage({ authenticated }: LandingPageProps) {
             Sign in with Google or GitHub · No credit card required
           </FadeUp>
 
-          <FadeUp delay={0.36} className="mt-10 flex flex-wrap items-center justify-center gap-2.5">
+          <FadeUp delay={0.33} className="mt-8 flex items-center justify-center gap-3">
+            <div className="flex -space-x-2">
+              {[
+                "bg-amber-500/80",
+                "bg-orange-400/80",
+                "bg-amber-600/80",
+                "bg-stone-500/80",
+                "bg-amber-400/80",
+              ].map((bg, i) => (
+                <div
+                  key={i}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#070707] text-[10px] font-semibold text-[#070707] ${bg}`}
+                >
+                  {["R", "A", "S", "K", "M"][i]}
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-stone-500">
+              Trusted by <span className="text-stone-300">researchers</span> &amp;{" "}
+              <span className="text-stone-300">professionals</span>
+            </p>
+          </FadeUp>
+
+          <FadeUp delay={0.36} className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
             {proofPoints.map((item) => (
               <span
                 key={item}
@@ -245,7 +316,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
             ))}
           </FadeUp>
 
-          <FadeUp delay={0.42} className="mt-12 grid gap-3 text-left sm:grid-cols-3">
+          <FadeUp delay={0.42} className="mt-10 grid gap-3 text-left sm:mt-12 sm:grid-cols-3">
             {stats.map((stat, index) => (
               <HoverCard key={stat.label} delay={index * 0.04}>
                 <div className="rounded-2xl border border-stone-800/80 bg-stone-900/35 p-5 backdrop-blur-sm">
@@ -261,7 +332,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
           </FadeUp>
         </section>
 
-        <RevealSection className="mx-auto max-w-5xl pb-28">
+        <RevealSection className="mx-auto max-w-5xl pb-16 sm:pb-28">
           <div className="relative rounded-[2rem] border border-stone-800/80 bg-[#0c0c0c]/95 p-1 shadow-[0_45px_140px_-24px_rgba(245,158,11,0.08)]">
             <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
 
@@ -400,12 +471,12 @@ export function LandingPage({ authenticated }: LandingPageProps) {
           </div>
         </RevealSection>
 
-        <section className="pb-28">
-          <RevealSection className="mb-14 text-center">
+        <section className="pb-16 sm:pb-28">
+          <RevealSection className="mb-10 text-center sm:mb-14">
             <p className="mb-3 text-sm font-medium uppercase tracking-[0.2em] text-amber-500/80">
               Capabilities
             </p>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
               Everything you need to understand your documents
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-stone-500">
@@ -435,12 +506,12 @@ export function LandingPage({ authenticated }: LandingPageProps) {
           </div>
         </section>
 
-        <section className="pb-28">
-          <RevealSection className="mb-14 text-center">
+        <section className="pb-16 sm:pb-28">
+          <RevealSection className="mb-10 text-center sm:mb-14">
             <p className="mb-3 text-sm font-medium uppercase tracking-[0.2em] text-amber-500/80">
               How it works
             </p>
-            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
               Three steps to instant answers
             </h2>
           </RevealSection>
@@ -470,28 +541,28 @@ export function LandingPage({ authenticated }: LandingPageProps) {
         </section>
 
         <RevealSection className="pb-24">
-          <div className="relative overflow-hidden rounded-[2rem] border border-stone-800/70 bg-gradient-to-b from-stone-900/65 to-[#070707] px-8 py-18 text-center">
+          <div className="relative overflow-hidden rounded-2xl border border-stone-800/70 bg-gradient-to-b from-stone-900/65 to-[#070707] px-6 py-12 text-center sm:rounded-[2rem] sm:px-8 sm:py-18">
             <div className="pointer-events-none absolute left-1/2 top-0 h-44 w-[520px] -translate-x-1/2 rounded-full bg-amber-500/[0.07] blur-[90px]" />
             <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/35 to-transparent" />
-            <h2 className="relative text-3xl font-bold tracking-tight sm:text-4xl">
-              Ready to chat with your PDFs?
+            <h2 className="relative text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
+              Stop searching. Start understanding.
             </h2>
-            <p className="relative mx-auto mb-8 mt-4 max-w-lg text-stone-500">
-              Join researchers, lawyers, and professionals who save hours every
-              week with faster document analysis and traceable answers.
+            <p className="relative mx-auto mb-8 mt-4 max-w-lg text-sm text-stone-500 sm:text-base">
+              Every hour spent searching PDFs manually is an hour lost to
+              actual analysis. Join professionals who made the switch.
             </p>
             <div className="relative flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button
                 asChild
                 size="lg"
-                className="h-12 rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] hover:bg-amber-400"
+                className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
               >
                 <Link href={authenticated ? "/dashboard" : "/sign-up"}>
                   {authenticated ? "Go to Dashboard" : "Get started free"}
                 </Link>
               </Button>
               <span className="text-xs text-stone-600">
-                Fast onboarding. No credit card required.
+                No credit card · 30-second setup
               </span>
             </div>
           </div>

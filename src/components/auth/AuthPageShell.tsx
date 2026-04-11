@@ -59,33 +59,33 @@ export function AuthPageShell({
 
           <Link
             href={alternateHref}
-            className="rounded-full border border-stone-800/80 bg-stone-900/35 px-4 py-2 text-sm text-stone-400 transition hover:border-stone-700 hover:bg-stone-900/60 hover:text-stone-200"
+            className="rounded-full border border-stone-800/80 bg-stone-900/35 px-3.5 py-2 text-xs text-stone-400 transition hover:border-stone-700 hover:bg-stone-900/60 hover:text-stone-200 sm:px-4 sm:text-sm"
           >
             {alternateLabel}
           </Link>
         </nav>
 
         <div className="flex flex-1 items-center py-8 sm:py-12">
-          <div className="grid w-full gap-12 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,420px)] lg:items-center">
-            <section className="max-w-2xl">
+          <div className="grid w-full gap-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,420px)] lg:items-center lg:gap-12">
+            <section className="max-w-2xl text-center lg:text-left">
               <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 text-sm text-amber-400">
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
                 {badge}
               </div>
 
-              <p className="mt-8 text-sm font-medium uppercase tracking-[0.22em] text-amber-500/80">
+              <p className="mt-8 hidden text-sm font-medium uppercase tracking-[0.22em] text-amber-500/80 lg:block">
                 {kicker}
               </p>
 
-              <h1 className="mt-4 text-4xl font-bold leading-[1.03] tracking-[-0.04em] text-stone-100 sm:text-6xl">
+              <h1 className="mt-4 text-3xl font-bold leading-[1.08] tracking-[-0.03em] text-stone-100 sm:text-4xl lg:text-6xl lg:leading-[1.03]">
                 {title}
               </h1>
 
-              <p className="mt-6 max-w-xl text-base leading-relaxed text-stone-400 sm:text-lg">
+              <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed text-stone-400 sm:text-base lg:mx-0 lg:mt-6 lg:text-lg">
                 {description}
               </p>
 
-              <div className="mt-8 flex flex-wrap gap-2.5">
+              <div className="mt-8 hidden flex-wrap gap-2.5 lg:flex">
                 <span className="rounded-full border border-stone-800/80 bg-stone-900/40 px-3.5 py-1.5 text-xs text-stone-400">
                   Google
                 </span>
@@ -97,7 +97,7 @@ export function AuthPageShell({
                 </span>
               </div>
 
-              <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              <div className="mt-10 hidden gap-4 lg:grid lg:grid-cols-3">
                 {highlights.map((highlight) => (
                   <div
                     key={highlight.title}
@@ -113,7 +113,7 @@ export function AuthPageShell({
                 ))}
               </div>
 
-              <div className="mt-8 overflow-hidden rounded-[1.75rem] border border-stone-800/75 bg-gradient-to-b from-stone-900/65 to-[#0b0b0b]">
+              <div className="mt-8 hidden overflow-hidden rounded-[1.75rem] border border-stone-800/75 bg-gradient-to-b from-stone-900/65 to-[#0b0b0b] lg:block">
                 <div className="border-b border-stone-800/70 px-5 py-4">
                   <div className="flex items-center gap-2">
                     <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />

@@ -70,7 +70,7 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
 
   return (
     <motion.div
-      className="relative w-full max-w-md overflow-hidden rounded-[2rem] border border-stone-800/80 bg-[#0c0c0c]/95 p-8 shadow-[0_35px_100px_-24px_rgba(0,0,0,0.75)] backdrop-blur-md"
+      className="relative w-full max-w-md overflow-hidden rounded-2xl border border-stone-800/80 bg-[#0c0c0c]/95 p-6 shadow-[0_35px_100px_-24px_rgba(0,0,0,0.75)] backdrop-blur-md sm:rounded-[2rem] sm:p-8"
       initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
       animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
       transition={{ duration: 0.55, ease: "easeOut" }}
@@ -92,22 +92,6 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
             <p className="text-sm leading-relaxed text-stone-500">
               {content.description}
             </p>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-stone-800/75 bg-stone-900/35 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-stone-200">
-                {content.helper}
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-stone-500">
-                Authentication is handled through secure OAuth providers.
-              </p>
-            </div>
-            <div className="rounded-full border border-amber-500/15 bg-amber-500/[0.08] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-400">
-              Secure
-            </div>
           </div>
         </div>
 
