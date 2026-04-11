@@ -4,6 +4,7 @@ import type { ChangeEvent } from "react";
 import { useState } from "react";
 import { useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
 import { authClient } from "@/lib/auth-client";
@@ -264,6 +265,11 @@ export function DashboardPanel({
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
         <header className="flex flex-col gap-4 rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-[0_24px_90px_-32px_rgba(17,24,39,0.4)] backdrop-blur md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
+            <BrandLogo
+              className="gap-3"
+              logoClassName="h-10 w-10"
+              textClassName="text-slate-950"
+            />
             <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-700">
               Dashboard
             </p>

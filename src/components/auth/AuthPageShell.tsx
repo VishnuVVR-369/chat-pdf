@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 type AuthPageShellProps = {
   alternateHref: string;
@@ -39,22 +40,8 @@ export function AuthPageShell({
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6">
         <nav className="flex items-center justify-between py-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 shadow-[0_12px_30px_-12px_rgba(245,158,11,0.9)]">
-              <svg
-                className="h-4 w-4 text-[#070707]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-            </div>
-            <span className="text-lg font-semibold tracking-tight">ChatPDF</span>
+          <Link href="/">
+            <BrandLogo priority />
           </Link>
 
           <Link
