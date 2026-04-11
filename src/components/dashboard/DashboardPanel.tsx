@@ -1,8 +1,8 @@
 "use client";
 
 import type { ChangeEvent } from "react";
-import { useState } from "react";
-import { useAction, useConvex, useMutation, useQuery } from "convex/react";
+import { useEffect, useState } from "react";
+import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,11 @@ export function DashboardPanel({
 }: DashboardPanelProps) {
   const router = useRouter();
   const convex = useConvex();
-  const documents = useQuery(api.documents.listDocuments);
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
+  const documents = useQuery(
+    api.documents.listDocuments,
+    isAuthenticated ? {} : "skip",
+  );
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const createDocument = useAction(api.documentUploads.createDocument);
   const [isSigningOut, setIsSigningOut] = useState(false);
@@ -69,6 +73,12 @@ export function DashboardPanel({
     documents?.filter((document) => document.status === "ready").length ?? 0;
   const selectedDocument =
     documents?.find((document) => document._id === selectedDocumentId) ?? null;
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace("/sign-in");
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
 
   const pushApiEvent = (
     label: string,

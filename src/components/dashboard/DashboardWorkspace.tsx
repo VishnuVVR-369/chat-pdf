@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,11 @@ export function DashboardWorkspace({
   name,
 }: DashboardWorkspaceProps) {
   const router = useRouter();
-  const documents = useQuery(api.documents.listDocuments);
+  const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
+  const documents = useQuery(
+    api.documents.listDocuments,
+    isAuthenticated ? {} : "skip",
+  );
   const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
   const createDocument = useAction(api.documentUploads.createDocument);
 
@@ -38,9 +42,22 @@ export function DashboardWorkspace({
   const [dropZoneFile, setDropZoneFile] = useState<File | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<Id<"documents"> | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("preview");
+  const [hasMounted, setHasMounted] = useState(false);
 
   const workspaceDocuments: WorkspaceDocument[] = useMemo(() => documents ?? [], [documents]);
   const selectedDocument = workspaceDocuments.find((d) => d._id === selectedDocumentId) ?? null;
+  const isDocumentsLoading = isAuthenticated && documents === undefined;
+  const showWorkspaceLoading = hasMounted && (isAuthLoading || isDocumentsLoading);
+
+  useEffect(() => {
+    if (!isAuthLoading && !isAuthenticated) {
+      router.replace("/sign-in");
+    }
+  }, [isAuthLoading, isAuthenticated, router]);
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   // Auto-select first document
   useEffect(() => {
@@ -165,7 +182,14 @@ export function DashboardWorkspace({
           </div>
 
           {/* Content area */}
-          {selectedDocument ? (
+          {showWorkspaceLoading ? (
+            <div className="flex flex-1 items-center justify-center px-6">
+              <div className="flex items-center gap-3 text-sm text-stone-400">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-stone-700 border-t-amber-400" />
+                Loading your workspace...
+              </div>
+            </div>
+          ) : selectedDocument ? (
             <>
               {/* Desktop: side-by-side */}
               <div className="hidden flex-1 lg:flex">
