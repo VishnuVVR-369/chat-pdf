@@ -1,6 +1,5 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { tables as betterAuthTables } from "./betterAuth/schema";
 
 const documentStatus = v.union(
   v.literal("uploaded"),
@@ -24,7 +23,6 @@ const answerStatus = v.union(
 );
 
 export default defineSchema({
-  ...betterAuthTables,
   documents: defineTable({
     ownerTokenIdentifier: v.string(),
     title: v.string(),

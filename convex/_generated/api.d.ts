@@ -9,6 +9,7 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as documentUploads from "../documentUploads.js";
 import type * as documents from "../documents.js";
 import type * as http from "../http.js";
 
@@ -20,6 +21,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  documentUploads: typeof documentUploads;
   documents: typeof documents;
   http: typeof http;
 }>;

@@ -1,24 +1,8 @@
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
-import {
-  action,
-  internalMutation,
-  internalQuery,
-  mutation,
-  query,
-} from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
-type StorageMetadata = {
-  _id: Id<"_storage">;
-  _creationTime: number;
-  contentType?: string;
-  sha256: string;
-  size: number;
-};
-
-type AuthenticatedCtx = QueryCtx | MutationCtx | ActionCtx;
+type AuthenticatedCtx = QueryCtx | MutationCtx;
 
 async function requireCurrentUser(ctx: AuthenticatedCtx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -32,40 +16,6 @@ async function requireCurrentUser(ctx: AuthenticatedCtx) {
 
 function deriveDocumentTitle(filename: string) {
   return filename.replace(/\.pdf$/i, "").trim() || "Untitled PDF";
-}
-
-async function loadStoredPdfMetadata(
-  ctx: ActionCtx,
-  storageId: Id<"_storage">,
-): Promise<StorageMetadata> {
-  const metadata = await ctx.runQuery(internal.documents.getStorageMetadata, {
-    storageId,
-  });
-
-  if (metadata === null) {
-    throw new Error("Uploaded file could not be found in Convex storage.");
-  }
-
-  if (metadata.size <= 0) {
-    await ctx.storage.delete(storageId);
-    throw new Error("Uploaded PDF is empty.");
-  }
-
-  const blob = await ctx.storage.get(storageId);
-
-  if (!blob) {
-    throw new Error("Uploaded file could not be read from Convex storage.");
-  }
-
-  const headerBytes = new Uint8Array(await blob.arrayBuffer()).subarray(0, 5);
-  const signature = new TextDecoder("utf-8").decode(headerBytes);
-
-  if (signature !== "%PDF-") {
-    await ctx.storage.delete(storageId);
-    throw new Error("Only valid PDF files can be uploaded.");
-  }
-
-  return metadata as StorageMetadata;
 }
 
 export const generateUploadUrl = mutation({
@@ -113,6 +63,7 @@ export const createDocumentRecord = internalMutation({
     filename: v.string(),
     storageId: v.id("_storage"),
     ownerTokenIdentifier: v.string(),
+    pageCount: v.number(),
     storageContentType: v.optional(v.string()),
     storageSize: v.number(),
     sha256: v.string(),
@@ -140,29 +91,9 @@ export const createDocumentRecord = internalMutation({
       storageContentType: args.storageContentType,
       storageSize: args.storageSize,
       sha256: args.sha256,
+      pageCount: args.pageCount,
       status: "uploaded",
       uploadCompletedAt: Date.now(),
-    });
-  },
-});
-
-export const createDocument = action({
-  args: {
-    filename: v.string(),
-    storageId: v.id("_storage"),
-  },
-  returns: v.id("documents"),
-  handler: async (ctx, args): Promise<Id<"documents">> => {
-    const identity = await requireCurrentUser(ctx);
-    const metadata = await loadStoredPdfMetadata(ctx, args.storageId);
-
-    return await ctx.runMutation(internal.documents.createDocumentRecord, {
-      filename: args.filename,
-      storageId: args.storageId,
-      ownerTokenIdentifier: identity.tokenIdentifier,
-      storageContentType: metadata.contentType,
-      storageSize: metadata.size,
-      sha256: metadata.sha256,
     });
   },
 });
