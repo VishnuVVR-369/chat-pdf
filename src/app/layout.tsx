@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { getToken } from "@/lib/auth-server";
 import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next"
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-sans" });
 
