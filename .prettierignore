@@ -1,0 +1,13 @@
+.next
+out
+build
+coverage
+node_modules
+.agents
+.claude
+AGENTS.md
+CLAUDE.md
+pnpm-lock.yaml
+convex/_generated
+convex/**/_generated
+next-env.d.ts

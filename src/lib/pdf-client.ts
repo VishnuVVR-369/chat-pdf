@@ -1,4 +1,7 @@
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import {
+  getDocument,
+  GlobalWorkerOptions,
+} from "pdfjs-dist/legacy/build/pdf.mjs";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
 
 export type PdfPreflightResult =
@@ -99,4 +102,3 @@ export async function inspectPdfFile(file: File): Promise<PdfPreflightResult> {
     };
   }
 }
-

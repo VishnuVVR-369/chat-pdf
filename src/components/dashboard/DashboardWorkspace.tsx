@@ -22,10 +22,7 @@ type DashboardWorkspaceProps = {
 
 type MobileTab = "preview" | "chat";
 
-export function DashboardWorkspace({
-  email,
-  name,
-}: DashboardWorkspaceProps) {
+export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   const router = useRouter();
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const documents = useQuery(
@@ -40,14 +37,20 @@ export function DashboardWorkspace({
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [dropZoneFile, setDropZoneFile] = useState<File | null>(null);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<Id<"documents"> | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] =
+    useState<Id<"documents"> | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("preview");
   const [hasMounted, setHasMounted] = useState(false);
 
-  const workspaceDocuments: WorkspaceDocument[] = useMemo(() => documents ?? [], [documents]);
-  const selectedDocument = workspaceDocuments.find((d) => d._id === selectedDocumentId) ?? null;
+  const workspaceDocuments: WorkspaceDocument[] = useMemo(
+    () => documents ?? [],
+    [documents],
+  );
+  const selectedDocument =
+    workspaceDocuments.find((d) => d._id === selectedDocumentId) ?? null;
   const isDocumentsLoading = isAuthenticated && documents === undefined;
-  const showWorkspaceLoading = hasMounted && (isAuthLoading || isDocumentsLoading);
+  const showWorkspaceLoading =
+    hasMounted && (isAuthLoading || isDocumentsLoading);
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -64,7 +67,10 @@ export function DashboardWorkspace({
     if (!selectedDocumentId && workspaceDocuments.length > 0) {
       setSelectedDocumentId(workspaceDocuments[0]._id);
     }
-    if (selectedDocumentId && !workspaceDocuments.some((d) => d._id === selectedDocumentId)) {
+    if (
+      selectedDocumentId &&
+      !workspaceDocuments.some((d) => d._id === selectedDocumentId)
+    ) {
       setSelectedDocumentId(workspaceDocuments[0]?._id ?? null);
     }
   }, [selectedDocumentId, workspaceDocuments]);
@@ -91,7 +97,8 @@ export function DashboardWorkspace({
     if (!uploadResponse.ok) throw new Error("Upload rejected by storage.");
 
     const body = (await uploadResponse.json()) as { storageId?: string };
-    if (!body.storageId) throw new Error("Storage did not return a storage id.");
+    if (!body.storageId)
+      throw new Error("Storage did not return a storage id.");
 
     return createDocument({
       filename: file.name,
@@ -193,10 +200,13 @@ export function DashboardWorkspace({
             <>
               {/* Desktop: side-by-side */}
               <div className="hidden flex-1 lg:flex">
-                <div className="flex-1 border-r border-stone-800/60">
-                  <PdfViewer key={selectedDocument._id} document={selectedDocument} />
+                <div className="min-w-0 flex-[0.92] border-r border-stone-800/60 xl:flex-[0.88]">
+                  <PdfViewer
+                    key={selectedDocument._id}
+                    document={selectedDocument}
+                  />
                 </div>
-                <div className="w-[420px] shrink-0 xl:w-[480px]">
+                <div className="w-[460px] shrink-0 xl:w-[560px] 2xl:w-[620px]">
                   <ChatPanel document={selectedDocument} />
                 </div>
               </div>
@@ -232,13 +242,22 @@ export function DashboardWorkspace({
                 <div className="flex-1 overflow-hidden">
                   <div
                     aria-hidden={mobileTab !== "preview"}
-                    className={cn("h-full", mobileTab === "preview" ? "block" : "hidden")}
+                    className={cn(
+                      "h-full",
+                      mobileTab === "preview" ? "block" : "hidden",
+                    )}
                   >
-                    <PdfViewer key={selectedDocument._id} document={selectedDocument} />
+                    <PdfViewer
+                      key={selectedDocument._id}
+                      document={selectedDocument}
+                    />
                   </div>
                   <div
                     aria-hidden={mobileTab !== "chat"}
-                    className={cn("h-full", mobileTab === "chat" ? "block" : "hidden")}
+                    className={cn(
+                      "h-full",
+                      mobileTab === "chat" ? "block" : "hidden",
+                    )}
                   >
                     <ChatPanel document={selectedDocument} />
                   </div>
@@ -246,10 +265,12 @@ export function DashboardWorkspace({
               </div>
             </>
           ) : (
-            <UploadDropZone onFileSelect={(file) => {
-              setDropZoneFile(file);
-              setIsUploadModalOpen(true);
-            }} />
+            <UploadDropZone
+              onFileSelect={(file) => {
+                setDropZoneFile(file);
+                setIsUploadModalOpen(true);
+              }}
+            />
           )}
         </div>
       </div>
@@ -259,7 +280,15 @@ export function DashboardWorkspace({
 
 function MenuIcon() {
   return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 8h16" />
       <path d="M4 16h16" />
     </svg>

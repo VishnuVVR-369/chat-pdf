@@ -77,7 +77,7 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.08),transparent_38%)]" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
-      <div className="absolute right-6 top-6 h-24 w-24 rounded-full bg-amber-500/[0.06] blur-3xl" />
+      <div className="absolute top-6 right-6 h-24 w-24 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
       <div className="relative space-y-6">
         <div className="space-y-3">
@@ -120,7 +120,7 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
 
         <div className="flex items-center gap-3">
           <div className="h-px flex-1 bg-stone-800/80" />
-          <span className="text-[11px] uppercase tracking-[0.18em] text-stone-600">
+          <span className="text-[11px] tracking-[0.18em] text-stone-600 uppercase">
             Trusted access
           </span>
           <div className="h-px flex-1 bg-stone-800/80" />

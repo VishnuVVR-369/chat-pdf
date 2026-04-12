@@ -17,11 +17,13 @@ export default async function SignUpPage() {
       highlights={[
         {
           title: "One-click onboarding",
-          description: "Google or GitHub gets you into the product immediately.",
+          description:
+            "Google or GitHub gets you into the product immediately.",
         },
         {
           title: "Private by default",
-          description: "Keep document work inside a protected authenticated space.",
+          description:
+            "Keep document work inside a protected authenticated space.",
         },
         {
           title: "Built for momentum",

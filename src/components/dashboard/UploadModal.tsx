@@ -23,7 +23,13 @@ type ModalPhase =
   | { type: "success"; documentId: Id<"documents"> }
   | { type: "error"; message: string };
 
-export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess }: UploadModalProps) {
+export function UploadModal({
+  isOpen,
+  initialFile,
+  onClose,
+  onUpload,
+  onSuccess,
+}: UploadModalProps) {
   const [phase, setPhase] = useState<ModalPhase>({ type: "idle" });
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -35,7 +41,7 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
     if (isOpen && initialFile) {
       void processFile(initialFile);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialFile]);
 
   // Reset state after modal closes
@@ -73,7 +79,8 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
   const processFile = useCallback(
     async (file: File) => {
       const looksLikePdf =
-        file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        file.type === "application/pdf" ||
+        file.name.toLowerCase().endsWith(".pdf");
 
       if (!looksLikePdf) {
         setPhase({ type: "error", message: "Please select a valid PDF file." });
@@ -98,7 +105,10 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
       } catch (error) {
         setPhase({
           type: "error",
-          message: error instanceof Error ? error.message : "Upload failed. Please try again.",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Upload failed. Please try again.",
         });
       }
     },
@@ -183,12 +193,14 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
             />
 
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-stone-800/60">
+            <div className="flex items-center justify-between border-b border-stone-800/60 px-5 pt-5 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
                   <UploadIcon size={14} />
                 </div>
-                <h2 className="text-sm font-semibold text-stone-200">Upload PDF</h2>
+                <h2 className="text-sm font-semibold text-stone-200">
+                  Upload PDF
+                </h2>
               </div>
               {!isProcessing && (
                 <button
@@ -241,7 +253,9 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
                           isDragging ? "text-amber-300" : "text-stone-300",
                         )}
                       >
-                        {isDragging ? "Release to upload" : "Drop your PDF here"}
+                        {isDragging
+                          ? "Release to upload"
+                          : "Drop your PDF here"}
                       </p>
 
                       <p className="mt-1.5 text-sm text-stone-500">
@@ -292,7 +306,9 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
                           r="28"
                           stroke="currentColor"
                           strokeDasharray="175.9"
-                          strokeDashoffset={phase.type === "checking" ? 100 : 40}
+                          strokeDashoffset={
+                            phase.type === "checking" ? 100 : 40
+                          }
                           strokeLinecap="round"
                           strokeWidth="3"
                         />
@@ -321,13 +337,17 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
                     </div>
 
                     <p className="text-sm font-medium text-stone-200">
-                      {phase.type === "checking" ? "Inspecting PDF…" : "Uploading…"}
+                      {phase.type === "checking"
+                        ? "Inspecting PDF…"
+                        : "Uploading…"}
                     </p>
                     <p className="mt-1.5 max-w-[200px] truncate text-center text-xs text-stone-500">
                       {phase.file.name}
                     </p>
                     {phase.type === "uploading" && phase.pageCount != null && (
-                      <p className="mt-1 text-xs text-stone-600">{phase.pageCount} pages</p>
+                      <p className="mt-1 text-xs text-stone-600">
+                        {phase.pageCount} pages
+                      </p>
                     )}
                   </motion.div>
                 )}
@@ -346,12 +366,20 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
                       animate={{ scale: 1 }}
                       className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/12 text-emerald-400"
                       initial={{ scale: 0.6 }}
-                      transition={{ delay: 0.05, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+                      transition={{
+                        delay: 0.05,
+                        duration: 0.35,
+                        ease: [0.16, 1, 0.3, 1],
+                      }}
                     >
                       <CheckIcon />
                     </motion.div>
-                    <p className="text-sm font-semibold text-stone-200">Upload complete!</p>
-                    <p className="mt-1 text-xs text-stone-500">Opening your document…</p>
+                    <p className="text-sm font-semibold text-stone-200">
+                      Upload complete!
+                    </p>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Opening your document…
+                    </p>
                   </motion.div>
                 )}
 
@@ -368,11 +396,11 @@ export function UploadModal({ isOpen, initialFile, onClose, onUpload, onSuccess 
                     <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-400">
                       <ErrorIcon />
                     </div>
-                    <p className="max-w-[250px] text-center text-sm text-stone-300 leading-relaxed">
+                    <p className="max-w-[250px] text-center text-sm leading-relaxed text-stone-300">
                       {phase.message}
                     </p>
                     <button
-                      className="mt-5 rounded-lg border border-stone-700/60 bg-stone-800/60 px-4 py-2 text-sm font-medium text-stone-200 transition-colors hover:bg-stone-700/80 hover:border-stone-600"
+                      className="mt-5 rounded-lg border border-stone-700/60 bg-stone-800/60 px-4 py-2 text-sm font-medium text-stone-200 transition-colors hover:border-stone-600 hover:bg-stone-700/80"
                       type="button"
                       onClick={() => {
                         setPhase({ type: "idle" });
@@ -415,7 +443,15 @@ function UploadIcon({ size = 20 }: { size?: number }) {
 
 function CloseIcon() {
   return (
-    <svg fill="none" height="14" stroke="currentColor" strokeLinecap="round" strokeWidth="2" viewBox="0 0 24 24" width="14">
+    <svg
+      fill="none"
+      height="14"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="14"
+    >
       <path d="M18 6 6 18M6 6l12 12" />
     </svg>
   );
@@ -423,7 +459,16 @@ function CloseIcon() {
 
 function PdfFileIcon() {
   return (
-    <svg fill="none" height="20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" viewBox="0 0 24 24" width="20">
+    <svg
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="20"
+    >
       <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
       <polyline points="14 2 14 8 20 8" />
     </svg>
@@ -432,7 +477,16 @@ function PdfFileIcon() {
 
 function CheckIcon() {
   return (
-    <svg fill="none" height="28" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="28">
+    <svg
+      fill="none"
+      height="28"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="28"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
@@ -440,7 +494,16 @@ function CheckIcon() {
 
 function ErrorIcon() {
   return (
-    <svg fill="none" height="28" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" viewBox="0 0 24 24" width="28">
+    <svg
+      fill="none"
+      height="28"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="28"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" x2="12" y1="8" y2="12" />
       <line x1="12" x2="12.01" y1="16" y2="16" />
@@ -450,7 +513,16 @@ function ErrorIcon() {
 
 function LockIcon() {
   return (
-    <svg fill="none" height="11" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" viewBox="0 0 24 24" width="11">
+    <svg
+      fill="none"
+      height="11"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="11"
+    >
       <rect height="11" rx="2" ry="2" width="18" x="3" y="11" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>

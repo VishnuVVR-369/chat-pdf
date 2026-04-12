@@ -101,6 +101,12 @@ Install dependencies:
 pnpm install
 ```
 
+Use the repo Node version:
+
+```bash
+nvm use
+```
+
 Start Next.js:
 
 ```bash
@@ -116,7 +122,10 @@ npx convex dev
 Run checks:
 
 ```bash
+pnpm format
+pnpm format:check
 pnpm lint
+pnpm typecheck
 pnpm build
 ```
 

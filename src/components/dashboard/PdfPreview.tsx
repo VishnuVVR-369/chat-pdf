@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf.mjs";
+import {
+  getDocument,
+  GlobalWorkerOptions,
+} from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/types/src/pdf";
 
 type PdfPreviewProps = {
@@ -123,7 +126,10 @@ export function PdfPreview({
       setError(null);
 
       try {
-        const safePageNumber = Math.min(Math.max(pageNumber, 1), activeDocument.numPages);
+        const safePageNumber = Math.min(
+          Math.max(pageNumber, 1),
+          activeDocument.numPages,
+        );
         const pdfPage = await activeDocument.getPage(safePageNumber);
 
         if (cancelled) {
@@ -185,7 +191,7 @@ export function PdfPreview({
     return (
       <div className="flex min-h-[420px] items-center justify-center rounded-[1.75rem] border border-red-500/20 bg-red-500/[0.04] p-6 text-center">
         <div className="max-w-md space-y-2">
-          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-red-400">
+          <p className="text-sm font-semibold tracking-[0.22em] text-red-400 uppercase">
             Preview unavailable
           </p>
           <p className="text-sm leading-7 text-stone-400">{error}</p>
@@ -195,9 +201,8 @@ export function PdfPreview({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-[1.75rem] border border-stone-800/75 bg-[#090909] p-5 shadow-[0_24px_80px_-40px_rgba(0,0,0,0.75)]">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
-      <div className="relative overflow-hidden rounded-[1.4rem] border border-stone-800/75 bg-stone-950/90">
+    <div className="relative h-full overflow-hidden bg-[#090909]">
+      <div className="relative flex min-h-full justify-center overflow-auto bg-stone-950/90">
         {isRendering ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090909]/75 backdrop-blur-sm">
             <div className="inline-flex items-center gap-3 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 text-sm text-amber-300">
@@ -207,10 +212,10 @@ export function PdfPreview({
           </div>
         ) : null}
 
-        <div className="flex justify-center p-4 sm:p-6">
+        <div className="flex min-h-full w-full justify-center">
           <canvas
             ref={canvasRef}
-            className="block max-w-full rounded-xl bg-white shadow-[0_24px_70px_-40px_rgba(255,255,255,0.25)]"
+            className="block max-w-full bg-white shadow-[0_24px_70px_-40px_rgba(255,255,255,0.25)]"
           />
         </div>
       </div>

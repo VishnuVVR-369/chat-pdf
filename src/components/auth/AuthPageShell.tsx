@@ -35,8 +35,8 @@ export function AuthPageShell({
         }}
       />
       <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/35 to-transparent" />
-      <div className="pointer-events-none fixed left-1/2 top-0 h-[560px] w-[860px] -translate-x-1/2 rounded-full bg-amber-500/[0.04] blur-[130px]" />
-      <div className="pointer-events-none fixed left-[-10%] top-[30%] h-[320px] w-[320px] rounded-full bg-orange-500/[0.03] blur-[120px]" />
+      <div className="pointer-events-none fixed top-0 left-1/2 h-[560px] w-[860px] -translate-x-1/2 rounded-full bg-amber-500/[0.04] blur-[130px]" />
+      <div className="pointer-events-none fixed top-[30%] left-[-10%] h-[320px] w-[320px] rounded-full bg-orange-500/[0.03] blur-[120px]" />
 
       <div className="relative mx-auto flex min-h-screen max-w-6xl flex-col px-6">
         <nav className="flex items-center justify-between py-6">
@@ -60,11 +60,11 @@ export function AuthPageShell({
                 {badge}
               </div>
 
-              <p className="mt-8 hidden text-sm font-medium uppercase tracking-[0.22em] text-amber-500/80 lg:block">
+              <p className="mt-8 hidden text-sm font-medium tracking-[0.22em] text-amber-500/80 uppercase lg:block">
                 {kicker}
               </p>
 
-              <h1 className="mt-4 text-3xl font-bold leading-[1.08] tracking-[-0.03em] text-stone-100 sm:text-4xl lg:text-6xl lg:leading-[1.03]">
+              <h1 className="mt-4 text-3xl leading-[1.08] font-bold tracking-[-0.03em] text-stone-100 sm:text-4xl lg:text-6xl lg:leading-[1.03]">
                 {title}
               </h1>
 
@@ -106,7 +106,7 @@ export function AuthPageShell({
                     <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />
                     <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />
                     <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />
-                    <div className="ml-3 text-[11px] uppercase tracking-[0.18em] text-stone-600">
+                    <div className="ml-3 text-[11px] tracking-[0.18em] text-stone-600 uppercase">
                       Authentication
                     </div>
                   </div>
@@ -147,7 +147,7 @@ export function AuthPageShell({
                   </div>
 
                   <div className="rounded-[1.4rem] border border-stone-800/75 bg-stone-950/60 p-4">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500">
+                    <p className="text-[11px] font-semibold tracking-[0.18em] text-stone-500 uppercase">
                       Why it feels better
                     </p>
                     <div className="mt-4 space-y-3">

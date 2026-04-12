@@ -70,11 +70,7 @@ export function Sidebar({
           textClassName="text-stone-100"
         />
         {collapsed && (
-          <BrandLogo
-            priority
-            className="mx-auto"
-            textClassName="hidden"
-          />
+          <BrandLogo priority className="mx-auto" textClassName="hidden" />
         )}
         <button
           className={cn(
@@ -115,7 +111,7 @@ export function Sidebar({
         {!collapsed && (
           <>
             <div className="mb-2 flex items-center justify-between gap-2 px-2">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-stone-500">
+              <p className="text-[11px] font-medium tracking-wider text-stone-500 uppercase">
                 Documents
                 {documents.length > 0 && (
                   <span className="ml-1.5 text-stone-600">
@@ -129,9 +125,9 @@ export function Sidebar({
 
             <label className="relative mb-3 block px-1">
               <span className="sr-only">Search PDFs</span>
-              <SearchIcon className="pointer-events-none absolute left-4 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-stone-500" />
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-4 h-3.5 w-3.5 -translate-y-1/2 text-stone-500" />
               <input
-                className="h-9 w-full rounded-xl border border-stone-800/80 bg-stone-950/90 pl-9 pr-9 text-sm text-stone-100 outline-none transition placeholder:text-stone-600 focus:border-amber-500/50 focus:bg-stone-950"
+                className="h-9 w-full rounded-xl border border-stone-800/80 bg-stone-950/90 pr-9 pl-9 text-sm text-stone-100 transition outline-none placeholder:text-stone-600 focus:border-amber-500/50 focus:bg-stone-950"
                 onChange={(event) => setSearchQuery(event.target.value)}
                 placeholder="Search PDFs"
                 type="search"
@@ -140,7 +136,7 @@ export function Sidebar({
               {searchQuery.length > 0 && (
                 <button
                   aria-label="Clear PDF search"
-                  className="absolute right-3 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-800/70 hover:text-stone-200"
+                  className="absolute top-1/2 right-3 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-stone-500 transition-colors hover:bg-stone-800/70 hover:text-stone-200"
                   onClick={() => setSearchQuery("")}
                   type="button"
                 >
@@ -196,15 +192,19 @@ export function Sidebar({
           </p>
         )}
 
-        {documents.length > 0 && filteredDocuments.length === 0 && !collapsed && (
-          <p className="px-2 py-4 text-center text-sm text-stone-600">
-            No PDFs match &quot;{searchQuery.trim()}&quot;
-          </p>
-        )}
+        {documents.length > 0 &&
+          filteredDocuments.length === 0 &&
+          !collapsed && (
+            <p className="px-2 py-4 text-center text-sm text-stone-600">
+              No PDFs match &quot;{searchQuery.trim()}&quot;
+            </p>
+          )}
       </div>
 
       {/* User section */}
-      <div className={cn("border-t border-stone-800/60 p-3", collapsed && "p-2")}>
+      <div
+        className={cn("border-t border-stone-800/60 p-3", collapsed && "p-2")}
+      >
         {collapsed ? (
           <div className="flex flex-col items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 text-xs font-semibold text-[#070707]">
@@ -267,7 +267,15 @@ function StatusDot({ status }: { status: string }) {
 
 function PdfIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
       <path d="M14 2v6h6" />
       <path d="M10 13h4" />
@@ -278,7 +286,15 @@ function PdfIcon() {
 
 function PlusIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 5v14" />
       <path d="M5 12h14" />
     </svg>
@@ -287,7 +303,15 @@ function PlusIcon() {
 
 function PanelCollapseIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m14 18-6-6 6-6" />
       <path d="M20 5v14" />
     </svg>
@@ -296,7 +320,15 @@ function PanelCollapseIcon() {
 
 function PanelExpandIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m10 18 6-6-6-6" />
       <path d="M4 5v14" />
     </svg>
@@ -305,7 +337,15 @@ function PanelExpandIcon() {
 
 function LogoutIcon() {
   return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
       <path d="M10 17l5-5-5-5" />
       <path d="M15 12H3" />
@@ -315,7 +355,15 @@ function LogoutIcon() {
 
 function SearchIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="11" cy="11" r="7" />
       <path d="m20 20-3.5-3.5" />
     </svg>
@@ -324,7 +372,15 @@ function SearchIcon({ className }: { className?: string }) {
 
 function ClearIcon() {
   return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M18 6 6 18" />
       <path d="m6 6 12 12" />
     </svg>

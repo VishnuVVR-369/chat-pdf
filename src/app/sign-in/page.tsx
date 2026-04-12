@@ -17,7 +17,8 @@ export default async function SignInPage() {
       highlights={[
         {
           title: "Resume instantly",
-          description: "Pick up your document analysis without another setup step.",
+          description:
+            "Pick up your document analysis without another setup step.",
         },
         {
           title: "Secure access",
@@ -25,7 +26,8 @@ export default async function SignInPage() {
         },
         {
           title: "Same workspace",
-          description: "Your uploads, chats, and citations are ready when you are.",
+          description:
+            "Your uploads, chats, and citations are ready when you are.",
         },
       ]}
       kicker="Sign in"

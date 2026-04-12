@@ -33,7 +33,8 @@ function buildDemoCitations(title: string): ChatCitation[] {
       id: `cite-1-${Date.now()}`,
       documentName: title,
       pageNumber: 2,
-      snippet: "Relevant content from the document will appear here once retrieval is connected.",
+      snippet:
+        "Relevant content from the document will appear here once retrieval is connected.",
     },
   ];
 }
@@ -116,7 +117,8 @@ export function ChatPanel({ document }: ChatPanelProps) {
                 Ask anything about this document
               </p>
               <p className="mt-1.5 text-xs text-stone-500">
-                Your questions will be answered using content from the selected PDF.
+                Your questions will be answered using content from the selected
+                PDF.
               </p>
             </div>
           </div>
@@ -204,7 +206,15 @@ export function ChatPanel({ document }: ChatPanelProps) {
 
 function ChatBubbleIcon() {
   return (
-    <svg className="h-4 w-4 text-stone-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-4 w-4 text-stone-500"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M7 10h10" />
       <path d="M7 14h7" />
       <path d="M5 19.5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-4 3.5Z" />
@@ -214,7 +224,15 @@ function ChatBubbleIcon() {
 
 function SendIcon() {
   return (
-    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m5 12 14-7-4 7 4 7Z" />
       <path d="M5 12h14" />
     </svg>

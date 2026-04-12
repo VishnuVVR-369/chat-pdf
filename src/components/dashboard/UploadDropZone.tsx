@@ -80,7 +80,15 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
 
 function UploadCloudIcon() {
   return (
-    <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-7 w-7"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 13v8" />
       <path d="m8 17 4-4 4 4" />
       <path d="M20 16.7A4.5 4.5 0 0 0 17.5 8h-1.1A7 7 0 1 0 4 14.9" />

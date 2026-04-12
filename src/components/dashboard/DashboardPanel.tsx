@@ -2,7 +2,13 @@
 
 import type { ChangeEvent } from "react";
 import { useEffect, useState } from "react";
-import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from "convex/react";
+import {
+  useAction,
+  useConvex,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -52,19 +58,19 @@ export function DashboardPanel({
   const [isUploading, setIsUploading] = useState(false);
   const [isRefreshingList, setIsRefreshingList] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(
+    null,
+  );
   const [lastUploadUrl, setLastUploadUrl] = useState<string | null>(null);
   const [lastStorageId, setLastStorageId] = useState<Id<"_storage"> | null>(
     null,
   );
-  const [lastCreatedDocumentId, setLastCreatedDocumentId] = useState<
-    Id<"documents"> | null
-  >(null);
+  const [lastCreatedDocumentId, setLastCreatedDocumentId] =
+    useState<Id<"documents"> | null>(null);
   const [lastListRunAt, setLastListRunAt] = useState<number | null>(null);
   const [apiEvents, setApiEvents] = useState<ApiEvent[]>([]);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<
-    Id<"documents"> | null
-  >(null);
+  const [selectedDocumentId, setSelectedDocumentId] =
+    useState<Id<"documents"> | null>(null);
 
   const documentCount = documents?.length ?? 0;
   const uploadedCount =
@@ -115,7 +121,10 @@ export function DashboardPanel({
     setIsRefreshingList(true);
 
     try {
-      const latestDocuments = await convex.query(api.documents.listDocuments, {});
+      const latestDocuments = await convex.query(
+        api.documents.listDocuments,
+        {},
+      );
       setLastListRunAt(Date.now());
       pushApiEvent(
         "listDocuments",
@@ -149,7 +158,8 @@ export function DashboardPanel({
     });
 
     const looksLikePdf =
-      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
 
     if (!looksLikePdf) {
       setPendingUpload(null);
@@ -216,7 +226,11 @@ export function DashboardPanel({
     try {
       const uploadUrl = await generateUploadUrl({});
       setLastUploadUrl(uploadUrl);
-      pushApiEvent("generateUploadUrl", "Signed upload URL created.", "success");
+      pushApiEvent(
+        "generateUploadUrl",
+        "Signed upload URL created.",
+        "success",
+      );
 
       const uploadResponse = await fetch(uploadUrl, {
         method: "POST",
@@ -280,7 +294,7 @@ export function DashboardPanel({
               logoClassName="h-10 w-10"
               textClassName="text-slate-950"
             />
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-700">
+            <p className="text-sm font-semibold tracking-[0.24em] text-cyan-700 uppercase">
               Dashboard
             </p>
             <div className="space-y-1">
@@ -316,17 +330,17 @@ export function DashboardPanel({
         <section className="rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-[0_24px_90px_-32px_rgba(17,24,39,0.35)] backdrop-blur">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div className="space-y-2">
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-700">
+              <p className="text-sm font-semibold tracking-[0.24em] text-cyan-700 uppercase">
                 Upload API Test
               </p>
               <h2 className="text-2xl font-semibold tracking-tight">
                 Check pages before upload.
               </h2>
               <p className="max-w-2xl text-sm leading-7 text-slate-600">
-                Select a PDF to read its page count locally first. Files with more
-                than {MAX_PDF_PAGES} pages are rejected before upload when
-                possible, and the backend enforces the same limit before creating
-                the document record.
+                Select a PDF to read its page count locally first. Files with
+                more than {MAX_PDF_PAGES} pages are rejected before upload when
+                possible, and the backend enforces the same limit before
+                creating the document record.
               </p>
             </div>
 
@@ -367,10 +381,10 @@ export function DashboardPanel({
             >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                  <p className="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
                     Pending PDF
                   </p>
-                  <p className="mt-2 break-words text-base font-semibold text-slate-950">
+                  <p className="mt-2 text-base font-semibold break-words text-slate-950">
                     {pendingUpload.file.name}
                   </p>
                 </div>
@@ -435,7 +449,7 @@ export function DashboardPanel({
           <div className="rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-[0_24px_90px_-32px_rgba(17,24,39,0.35)] backdrop-blur">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
+                <p className="text-sm font-semibold tracking-[0.24em] text-slate-500 uppercase">
                   listDocuments API
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -453,7 +467,9 @@ export function DashboardPanel({
                   onClick={handleRefreshList}
                   variant="outline"
                 >
-                  {isRefreshingList ? "Running listDocuments..." : "Run listDocuments"}
+                  {isRefreshingList
+                    ? "Running listDocuments..."
+                    : "Run listDocuments"}
                 </Button>
               </div>
             </div>
@@ -471,8 +487,10 @@ export function DashboardPanel({
                 </p>
               ) : documents.length === 0 ? (
                 <div className="rounded-[1.6rem] border border-dashed border-slate-300 bg-slate-50/80 px-5 py-8 text-sm leading-7 text-slate-600">
-                  No PDFs uploaded yet. Add your first document above to create a
-                  user-scoped record in the <span className="font-medium text-slate-900">documents</span> table.
+                  No PDFs uploaded yet. Add your first document above to create
+                  a user-scoped record in the{" "}
+                  <span className="font-medium text-slate-900">documents</span>{" "}
+                  table.
                 </div>
               ) : (
                 <div className="grid gap-4">
@@ -493,7 +511,7 @@ export function DashboardPanel({
                             </h3>
                             <StatusBadge status={document.status} />
                           </div>
-                          <p className="break-words text-sm text-slate-600">
+                          <p className="text-sm break-words text-slate-600">
                             {document.originalFilename}
                           </p>
                         </div>
@@ -507,8 +525,16 @@ export function DashboardPanel({
                             Inspect
                           </Button>
                           {document.fileUrl ? (
-                            <Button asChild className="rounded-full px-4" variant="outline">
-                              <a href={document.fileUrl} rel="noreferrer" target="_blank">
+                            <Button
+                              asChild
+                              className="rounded-full px-4"
+                              variant="outline"
+                            >
+                              <a
+                                href={document.fileUrl}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
                                 Open PDF
                               </a>
                             </Button>
@@ -533,7 +559,10 @@ export function DashboardPanel({
                               : "Unavailable"
                           }
                         />
-                        <DocumentMeta label="Document id" value={document._id} />
+                        <DocumentMeta
+                          label="Document id"
+                          value={document._id}
+                        />
                       </div>
 
                       {document.processingError ? (
@@ -550,7 +579,7 @@ export function DashboardPanel({
 
           <div className="space-y-6">
             <section className="rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-[0_24px_90px_-32px_rgba(17,24,39,0.35)] backdrop-blur">
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
+              <p className="text-sm font-semibold tracking-[0.24em] text-slate-500 uppercase">
                 API Activity
               </p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -560,7 +589,11 @@ export function DashboardPanel({
               <div className="mt-6 space-y-3">
                 {apiEvents.length === 0 ? (
                   <p className="rounded-[1.4rem] border border-dashed border-slate-300 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-600">
-                    Run an upload or click <span className="font-medium text-slate-900">Run listDocuments</span> to record API activity here.
+                    Run an upload or click{" "}
+                    <span className="font-medium text-slate-900">
+                      Run listDocuments
+                    </span>{" "}
+                    to record API activity here.
                   </p>
                 ) : (
                   apiEvents.map((event) => (
@@ -578,11 +611,11 @@ export function DashboardPanel({
                         <p className="text-sm font-semibold text-slate-900">
                           {event.label}
                         </p>
-                        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">
+                        <p className="text-xs tracking-[0.16em] text-slate-500 uppercase">
                           {formatTimestamp(event.createdAt)}
                         </p>
                       </div>
-                      <p className="mt-2 break-words text-sm leading-6 text-slate-700">
+                      <p className="mt-2 text-sm leading-6 break-words text-slate-700">
                         {event.detail}
                       </p>
                     </div>
@@ -592,7 +625,7 @@ export function DashboardPanel({
             </section>
 
             <section className="rounded-[2rem] border border-white/70 bg-white/90 p-6 shadow-[0_24px_90px_-32px_rgba(17,24,39,0.35)] backdrop-blur">
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">
+              <p className="text-sm font-semibold tracking-[0.24em] text-slate-500 uppercase">
                 Document Inspector
               </p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight">
@@ -611,7 +644,9 @@ export function DashboardPanel({
                     <InfoRow label="Status" value={selectedDocument.status} />
                     <InfoRow
                       label="Uploaded at"
-                      value={formatTimestamp(selectedDocument.uploadCompletedAt)}
+                      value={formatTimestamp(
+                        selectedDocument.uploadCompletedAt,
+                      )}
                     />
                     <InfoRow
                       label="Storage size"
@@ -640,8 +675,13 @@ export function DashboardPanel({
                   </div>
                 ) : (
                   <p className="rounded-[1.4rem] border border-dashed border-slate-300 bg-slate-50/80 px-4 py-5 text-sm leading-7 text-slate-600">
-                    Select a document from the list to inspect the data returned by
-                    <span className="font-medium text-slate-900"> listDocuments</span>.
+                    Select a document from the list to inspect the data returned
+                    by
+                    <span className="font-medium text-slate-900">
+                      {" "}
+                      listDocuments
+                    </span>
+                    .
                   </p>
                 )}
               </div>
@@ -656,10 +696,10 @@ export function DashboardPanel({
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/85 p-5 shadow-[0_18px_50px_-28px_rgba(15,23,42,0.35)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+      <p className="text-xs font-semibold tracking-[0.22em] text-slate-500 uppercase">
         {label}
       </p>
-      <p className="mt-3 break-words text-base leading-7 text-slate-900">
+      <p className="mt-3 text-base leading-7 break-words text-slate-900">
         {value}
       </p>
     </div>
@@ -669,10 +709,10 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 function DocumentMeta({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+      <p className="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
         {label}
       </p>
-      <p className="mt-2 break-words text-sm font-medium text-slate-900">
+      <p className="mt-2 text-sm font-medium break-words text-slate-900">
         {value}
       </p>
     </div>
@@ -682,10 +722,12 @@ function DocumentMeta({ label, value }: { label: string; value: string }) {
 function ApiResultCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[1.4rem] border border-slate-200/80 bg-slate-50/90 p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+      <p className="text-xs font-semibold tracking-[0.2em] text-slate-500 uppercase">
         {label}
       </p>
-      <p className="mt-3 break-words text-sm leading-6 text-slate-900">{value}</p>
+      <p className="mt-3 text-sm leading-6 break-words text-slate-900">
+        {value}
+      </p>
     </div>
   );
 }
@@ -693,10 +735,12 @@ function ApiResultCard({ label, value }: { label: string; value: string }) {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[1.2rem] border border-slate-200/80 bg-slate-50/85 px-4 py-3">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+      <p className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
         {label}
       </p>
-      <p className="mt-2 break-words text-sm leading-6 text-slate-900">{value}</p>
+      <p className="mt-2 text-sm leading-6 break-words text-slate-900">
+        {value}
+      </p>
     </div>
   );
 }
@@ -711,14 +755,11 @@ function StatusBadge({
     processing: "border-amber-200 bg-amber-50 text-amber-700",
     ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
     failed: "border-red-200 bg-red-50 text-red-700",
-  } satisfies Record<
-    "uploaded" | "processing" | "ready" | "failed",
-    string
-  >;
+  } satisfies Record<"uploaded" | "processing" | "ready" | "failed", string>;
 
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${styles[status]}`}
+      className={`rounded-full border px-3 py-1 text-xs font-semibold tracking-[0.18em] uppercase ${styles[status]}`}
     >
       {status}
     </span>

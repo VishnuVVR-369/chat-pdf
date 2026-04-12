@@ -9,8 +9,7 @@ type DashboardWorkspaceProps = {
 };
 
 const DashboardWorkspace = dynamic(
-  () =>
-    import("./DashboardWorkspace").then((mod) => mod.DashboardWorkspace),
+  () => import("./DashboardWorkspace").then((mod) => mod.DashboardWorkspace),
   {
     ssr: false,
     loading: () => (

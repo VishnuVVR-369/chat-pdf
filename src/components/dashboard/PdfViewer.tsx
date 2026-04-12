@@ -18,9 +18,15 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function PdfViewer({ document, localFile, onPageCountChange }: PdfViewerProps) {
+export function PdfViewer({
+  document,
+  localFile,
+  onPageCountChange,
+}: PdfViewerProps) {
   const [pageNumber, setPageNumber] = useState(1);
-  const [pageCount, setPageCount] = useState<number | null>(document.pageCount ?? null);
+  const [pageCount, setPageCount] = useState<number | null>(
+    document.pageCount ?? null,
+  );
 
   const handlePageCountChange = (count: number) => {
     setPageCount(count);
@@ -54,7 +60,7 @@ export function PdfViewer({ document, localFile, onPageCountChange }: PdfViewerP
           >
             <ChevronLeftIcon />
           </Button>
-          <span className="min-w-[4rem] text-center text-xs tabular-nums text-stone-400">
+          <span className="min-w-[4rem] text-center text-xs text-stone-400 tabular-nums">
             {pageNumber} / {pageCount ?? "–"}
           </span>
           <Button
@@ -72,8 +78,8 @@ export function PdfViewer({ document, localFile, onPageCountChange }: PdfViewerP
       </div>
 
       {/* Canvas */}
-      <div className="flex-1 overflow-auto bg-stone-950/50 p-4">
-        <div className="mx-auto max-w-2xl">
+      <div className="flex-1 overflow-hidden bg-stone-950/50">
+        <div className="h-full">
           <PdfPreview
             file={localFile}
             onPageCountChange={handlePageCountChange}
@@ -90,7 +96,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+        "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase",
         status === "ready" && "bg-emerald-500/10 text-emerald-400",
         status === "uploaded" && "bg-cyan-500/10 text-cyan-400",
         status === "processing" && "bg-amber-500/10 text-amber-400",
@@ -104,7 +110,15 @@ function StatusBadge({ status }: { status: string }) {
 
 function ChevronLeftIcon() {
   return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m15 18-6-6 6-6" />
     </svg>
   );
@@ -112,7 +126,15 @@ function ChevronLeftIcon() {
 
 function ChevronRightIcon() {
   return (
-    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m9 18 6-6-6-6" />
     </svg>
   );

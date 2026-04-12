@@ -38,10 +38,9 @@ async function loadStorageMetadata(
   ctx: ActionCtx,
   storageId: Id<"_storage">,
 ): Promise<StorageMetadata> {
-  const metadata = await ctx.runQuery(
-    internal.documents.getStorageMetadata,
-    { storageId },
-  );
+  const metadata = await ctx.runQuery(internal.documents.getStorageMetadata, {
+    storageId,
+  });
 
   if (metadata === null) {
     throw new Error("Uploaded file could not be found in Convex storage.");
