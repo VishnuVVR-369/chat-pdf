@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { getToken } from "@/lib/auth-server";
+import { Analytics } from "@vercel/analytics/next";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -46,6 +47,7 @@ export default async function RootLayout({
         <ConvexClientProvider initialToken={token}>
           {children}
         </ConvexClientProvider>
+        <Analytics />
       </body>
     </html>
   );
