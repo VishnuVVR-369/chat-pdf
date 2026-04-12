@@ -9,8 +9,17 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as chat from "../chat.js";
+import type * as chatState from "../chatState.js";
+import type * as documentAccess from "../documentAccess.js";
+import type * as documentChunkQueries from "../documentChunkQueries.js";
+import type * as documentChunkSearch from "../documentChunkSearch.js";
+import type * as documentChunks from "../documentChunks.js";
+import type * as documentProcessing from "../documentProcessing.js";
+import type * as documentProcessingState from "../documentProcessingState.js";
 import type * as documentUploads from "../documentUploads.js";
 import type * as documents from "../documents.js";
+import type * as googleCloud from "../googleCloud.js";
 import type * as http from "../http.js";
 
 import type {
@@ -21,8 +30,17 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  chat: typeof chat;
+  chatState: typeof chatState;
+  documentAccess: typeof documentAccess;
+  documentChunkQueries: typeof documentChunkQueries;
+  documentChunkSearch: typeof documentChunkSearch;
+  documentChunks: typeof documentChunks;
+  documentProcessing: typeof documentProcessing;
+  documentProcessingState: typeof documentProcessingState;
   documentUploads: typeof documentUploads;
   documents: typeof documents;
+  googleCloud: typeof googleCloud;
   http: typeof http;
 }>;
 

@@ -11,13 +11,14 @@ export type WorkspaceDocument = {
   _creationTime: number;
   title: string;
   originalFilename: string;
-  status: "uploaded" | "processing" | "ready" | "failed";
+  status: "uploading" | "uploaded" | "processing" | "ready" | "failed";
   pageCount?: number;
   processingError?: string;
   storageContentType?: string;
   storageSize: number;
   uploadCompletedAt: number;
   fileUrl: string | null;
+  ocrGcsInputUri?: string;
 };
 
 type SidebarProps = {
@@ -257,6 +258,7 @@ function StatusDot({ status }: { status: string }) {
       className={cn(
         "inline-block h-1.5 w-1.5 rounded-full",
         status === "ready" && "bg-emerald-400",
+        status === "uploading" && "bg-sky-400",
         status === "uploaded" && "bg-cyan-400",
         status === "processing" && "bg-amber-400",
         status === "failed" && "bg-red-400",

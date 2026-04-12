@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 const documentStatus = v.union(
+  v.literal("uploading"),
   v.literal("uploaded"),
   v.literal("processing"),
   v.literal("ready"),
@@ -9,6 +10,12 @@ const documentStatus = v.union(
 );
 
 const extractionMethod = v.union(v.literal("text"), v.literal("ocr"));
+
+const ocrMethod = v.union(
+  v.literal("document_ai_online"),
+  v.literal("document_ai_online_imageless"),
+  v.literal("document_ai_batch"),
+);
 
 const messageRole = v.union(
   v.literal("system"),
@@ -27,7 +34,7 @@ export default defineSchema({
     ownerTokenIdentifier: v.string(),
     title: v.string(),
     originalFilename: v.string(),
-    storageId: v.id("_storage"),
+    storageId: v.optional(v.id("_storage")),
     storageContentType: v.optional(v.string()),
     storageSize: v.number(),
     sha256: v.string(),
@@ -36,6 +43,15 @@ export default defineSchema({
     processingError: v.optional(v.string()),
     uploadCompletedAt: v.number(),
     lastProcessedAt: v.optional(v.number()),
+    processingStartedAt: v.optional(v.number()),
+    ocrCompletedAt: v.optional(v.number()),
+    processingAttemptCount: v.optional(v.number()),
+    ocrMethod: v.optional(ocrMethod),
+    ocrProvider: v.optional(v.literal("google_document_ai")),
+    ocrModelOrProcessor: v.optional(v.string()),
+    ocrGcsInputUri: v.optional(v.string()),
+    ocrGcsOutputPrefix: v.optional(v.string()),
+    ocrFinalJsonGcsUri: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"])
     .index("by_ownerTokenIdentifier_and_status", [
@@ -61,12 +77,13 @@ export default defineSchema({
     .index("by_documentId_and_pageNumber", ["documentId", "pageNumber"]),
   documentChunks: defineTable({
     ownerTokenIdentifier: v.string(),
+    ownerDocumentKey: v.string(),
     documentId: v.id("documents"),
     startPageNumber: v.number(),
     endPageNumber: v.number(),
     text: v.string(),
     tokenCount: v.optional(v.number()),
-    embedding: v.optional(v.array(v.number())),
+    embedding: v.optional(v.array(v.float64())),
   })
     .index("by_ownerTokenIdentifier_and_documentId", [
       "ownerTokenIdentifier",
@@ -75,7 +92,12 @@ export default defineSchema({
     .index("by_documentId_and_startPageNumber", [
       "documentId",
       "startPageNumber",
-    ]),
+    ])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 3072,
+      filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
+    }),
   chatSessions: defineTable({
     ownerTokenIdentifier: v.string(),
     title: v.optional(v.string()),
@@ -86,6 +108,10 @@ export default defineSchema({
     chatSessionId: v.id("chatSessions"),
     documentId: v.id("documents"),
   })
+    .index("by_ownerTokenIdentifier_and_documentId", [
+      "ownerTokenIdentifier",
+      "documentId",
+    ])
     .index("by_ownerTokenIdentifier_and_chatSessionId", [
       "ownerTokenIdentifier",
       "chatSessionId",

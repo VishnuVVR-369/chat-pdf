@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -29,8 +29,13 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     api.documents.listDocuments,
     isAuthenticated ? {} : "skip",
   );
-  const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
-  const createDocument = useAction(api.documentUploads.createDocument);
+  const createDirectUploadTarget = useAction(
+    api.documentUploads.createDirectUploadTarget,
+  );
+  const completeDirectUpload = useAction(
+    api.documentUploads.completeDirectUpload,
+  );
+  const getDocumentPdfUrl = useAction(api.documentAccess.getDocumentPdfUrl);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -41,6 +46,12 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     useState<Id<"documents"> | null>(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("preview");
   const [hasMounted, setHasMounted] = useState(false);
+  const [selectedDocumentPreviewUrl, setSelectedDocumentPreviewUrl] = useState<
+    string | null
+  >(null);
+  const [uploadedPreviewFiles, setUploadedPreviewFiles] = useState<
+    Record<string, File>
+  >({});
 
   const workspaceDocuments: WorkspaceDocument[] = useMemo(
     () => documents ?? [],
@@ -48,6 +59,9 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   );
   const selectedDocument =
     workspaceDocuments.find((d) => d._id === selectedDocumentId) ?? null;
+  const selectedDocumentLocalFile = selectedDocumentId
+    ? (uploadedPreviewFiles[selectedDocumentId] ?? null)
+    : null;
   const isDocumentsLoading = isAuthenticated && documents === undefined;
   const showWorkspaceLoading =
     hasMounted && (isAuthLoading || isDocumentsLoading);
@@ -75,6 +89,39 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     }
   }, [selectedDocumentId, workspaceDocuments]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolvePreviewUrl() {
+      if (!selectedDocumentId) {
+        setSelectedDocumentPreviewUrl(null);
+        return;
+      }
+
+      setSelectedDocumentPreviewUrl(null);
+
+      try {
+        const previewUrl = await getDocumentPdfUrl({
+          documentId: selectedDocumentId,
+        });
+
+        if (!cancelled) {
+          setSelectedDocumentPreviewUrl(previewUrl ?? null);
+        }
+      } catch {
+        if (!cancelled) {
+          setSelectedDocumentPreviewUrl(null);
+        }
+      }
+    }
+
+    void resolvePreviewUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getDocumentPdfUrl, selectedDocumentId]);
+
   const handleSignOut = async () => {
     setIsSigningOut(true);
     try {
@@ -87,22 +134,21 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   };
 
   const handleUploadFile = async (file: File): Promise<Id<"documents">> => {
-    const uploadUrl = await generateUploadUrl({});
-    const uploadResponse = await fetch(uploadUrl, {
-      method: "POST",
+    const directUploadTarget = await createDirectUploadTarget({
+      filename: file.name,
+      contentType: file.type || "application/pdf",
+    });
+
+    const uploadResponse = await fetch(directUploadTarget.uploadUrl, {
+      method: directUploadTarget.method,
       headers: { "Content-Type": file.type || "application/pdf" },
       body: file,
     });
 
-    if (!uploadResponse.ok) throw new Error("Upload rejected by storage.");
+    if (!uploadResponse.ok) throw new Error("Upload rejected by GCS.");
 
-    const body = (await uploadResponse.json()) as { storageId?: string };
-    if (!body.storageId)
-      throw new Error("Storage did not return a storage id.");
-
-    return createDocument({
-      filename: file.name,
-      storageId: body.storageId as Id<"_storage">,
+    return completeDirectUpload({
+      documentId: directUploadTarget.documentId,
     });
   };
 
@@ -118,7 +164,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
           setDropZoneFile(null);
         }}
         onUpload={handleUploadFile}
-        onSuccess={(documentId) => {
+        onSuccess={(documentId, file) => {
+          setUploadedPreviewFiles((currentFiles) => ({
+            ...currentFiles,
+            [documentId]: file,
+          }));
           setSelectedDocumentId(documentId);
           setIsUploadModalOpen(false);
           setDropZoneFile(null);
@@ -204,6 +254,12 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                   <PdfViewer
                     key={selectedDocument._id}
                     document={selectedDocument}
+                    localFile={
+                      selectedDocumentPreviewUrl
+                        ? null
+                        : selectedDocumentLocalFile
+                    }
+                    resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
                 <div className="w-[460px] shrink-0 xl:w-[560px] 2xl:w-[620px]">
@@ -250,6 +306,12 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                     <PdfViewer
                       key={selectedDocument._id}
                       document={selectedDocument}
+                      localFile={
+                        selectedDocumentPreviewUrl
+                          ? null
+                          : selectedDocumentLocalFile
+                      }
+                      resolvedFileUrl={selectedDocumentPreviewUrl}
                     />
                   </div>
                   <div
