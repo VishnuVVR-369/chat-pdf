@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
-import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { ChatPanel } from "./ChatPanel";
+import { DocumentPipelinePanel } from "./DocumentPipelinePanel";
 import { PdfViewer } from "./PdfViewer";
 import { Sidebar } from "./Sidebar";
 import type { WorkspaceDocument } from "./Sidebar";
@@ -20,7 +19,7 @@ type DashboardWorkspaceProps = {
   tokenIdentifier: string;
 };
 
-type MobileTab = "preview" | "chat";
+const EMPTY_DOCUMENTS: WorkspaceDocument[] = [];
 
 export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   const router = useRouter();
@@ -44,7 +43,6 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   const [dropZoneFile, setDropZoneFile] = useState<File | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] =
     useState<Id<"documents"> | null>(null);
-  const [mobileTab, setMobileTab] = useState<MobileTab>("preview");
   const [hasMounted, setHasMounted] = useState(false);
   const [selectedDocumentPreviewUrl, setSelectedDocumentPreviewUrl] = useState<
     string | null
@@ -53,12 +51,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     Record<string, File>
   >({});
 
-  const workspaceDocuments: WorkspaceDocument[] = useMemo(
-    () => documents ?? [],
-    [documents],
-  );
+  const workspaceDocuments = documents ?? EMPTY_DOCUMENTS;
   const selectedDocument =
-    workspaceDocuments.find((d) => d._id === selectedDocumentId) ?? null;
+    workspaceDocuments.find(
+      (document) => document._id === selectedDocumentId,
+    ) ?? null;
   const selectedDocumentLocalFile = selectedDocumentId
     ? (uploadedPreviewFiles[selectedDocumentId] ?? null)
     : null;
@@ -76,14 +73,16 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     setHasMounted(true);
   }, []);
 
-  // Auto-select first document
   useEffect(() => {
     if (!selectedDocumentId && workspaceDocuments.length > 0) {
       setSelectedDocumentId(workspaceDocuments[0]._id);
     }
+
     if (
       selectedDocumentId &&
-      !workspaceDocuments.some((d) => d._id === selectedDocumentId)
+      !workspaceDocuments.some(
+        (document) => document._id === selectedDocumentId,
+      )
     ) {
       setSelectedDocumentId(workspaceDocuments[0]?._id ?? null);
     }
@@ -124,6 +123,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
 
   const handleSignOut = async () => {
     setIsSigningOut(true);
+
     try {
       await authClient.signOut();
       router.push("/sign-in");
@@ -145,9 +145,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
       body: file,
     });
 
-    if (!uploadResponse.ok) throw new Error("Upload rejected by GCS.");
+    if (!uploadResponse.ok) {
+      throw new Error("Upload rejected by GCS.");
+    }
 
-    return completeDirectUpload({
+    return await completeDirectUpload({
       documentId: directUploadTarget.documentId,
     });
   };
@@ -176,7 +178,6 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
       />
 
       <div className="flex h-full">
-        {/* Mobile sidebar overlay */}
         {isMobileSidebarOpen && (
           <div className="fixed inset-0 z-40 lg:hidden">
             <div
@@ -206,7 +207,6 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
           </div>
         )}
 
-        {/* Desktop sidebar */}
         <div className="hidden lg:block">
           <Sidebar
             collapsed={isSidebarCollapsed}
@@ -222,9 +222,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
           />
         </div>
 
-        {/* Main content */}
         <div className="flex min-w-0 flex-1 flex-col">
-          {/* Mobile header */}
           <div className="flex items-center gap-3 border-b border-stone-800/60 px-4 py-3 lg:hidden">
             <button
               className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:bg-stone-800/50 hover:text-stone-200"
@@ -238,7 +236,6 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
             </span>
           </div>
 
-          {/* Content area */}
           {showWorkspaceLoading ? (
             <div className="flex flex-1 items-center justify-center px-6">
               <div className="flex items-center gap-3 text-sm text-stone-400">
@@ -248,9 +245,8 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
             </div>
           ) : selectedDocument ? (
             <>
-              {/* Desktop: side-by-side */}
               <div className="hidden flex-1 lg:flex">
-                <div className="min-w-0 flex-[0.92] border-r border-stone-800/60 xl:flex-[0.88]">
+                <div className="min-w-0 flex-1 border-r border-stone-800/60">
                   <PdfViewer
                     key={selectedDocument._id}
                     document={selectedDocument}
@@ -262,67 +258,26 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                     resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
-                <div className="w-[460px] shrink-0 xl:w-[560px] 2xl:w-[620px]">
-                  <ChatPanel document={selectedDocument} />
+                <div className="w-[380px] shrink-0 xl:w-[420px]">
+                  <DocumentPipelinePanel document={selectedDocument} />
                 </div>
               </div>
 
-              {/* Mobile: tabbed */}
               <div className="flex flex-1 flex-col lg:hidden">
-                <div className="flex border-b border-stone-800/60">
-                  <button
-                    className={cn(
-                      "flex-1 px-4 py-2.5 text-center text-sm font-medium transition-colors",
-                      mobileTab === "preview"
-                        ? "border-b-2 border-amber-500 text-stone-100"
-                        : "text-stone-500 hover:text-stone-300",
-                    )}
-                    onClick={() => setMobileTab("preview")}
-                    type="button"
-                  >
-                    Preview
-                  </button>
-                  <button
-                    className={cn(
-                      "flex-1 px-4 py-2.5 text-center text-sm font-medium transition-colors",
-                      mobileTab === "chat"
-                        ? "border-b-2 border-amber-500 text-stone-100"
-                        : "text-stone-500 hover:text-stone-300",
-                    )}
-                    onClick={() => setMobileTab("chat")}
-                    type="button"
-                  >
-                    Chat
-                  </button>
+                <div className="min-h-0 flex-1">
+                  <PdfViewer
+                    key={selectedDocument._id}
+                    document={selectedDocument}
+                    localFile={
+                      selectedDocumentPreviewUrl
+                        ? null
+                        : selectedDocumentLocalFile
+                    }
+                    resolvedFileUrl={selectedDocumentPreviewUrl}
+                  />
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <div
-                    aria-hidden={mobileTab !== "preview"}
-                    className={cn(
-                      "h-full",
-                      mobileTab === "preview" ? "block" : "hidden",
-                    )}
-                  >
-                    <PdfViewer
-                      key={selectedDocument._id}
-                      document={selectedDocument}
-                      localFile={
-                        selectedDocumentPreviewUrl
-                          ? null
-                          : selectedDocumentLocalFile
-                      }
-                      resolvedFileUrl={selectedDocumentPreviewUrl}
-                    />
-                  </div>
-                  <div
-                    aria-hidden={mobileTab !== "chat"}
-                    className={cn(
-                      "h-full",
-                      mobileTab === "chat" ? "block" : "hidden",
-                    )}
-                  >
-                    <ChatPanel document={selectedDocument} />
-                  </div>
+                <div className="max-h-[40%] min-h-[280px] border-t border-stone-800/60">
+                  <DocumentPipelinePanel document={selectedDocument} />
                 </div>
               </div>
             </>
@@ -347,9 +302,9 @@ function MenuIcon() {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
+      strokeWidth="1.8"
     >
       <path d="M4 8h16" />
       <path d="M4 16h16" />

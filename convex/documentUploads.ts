@@ -36,6 +36,7 @@ async function readPdfPageCount(bytes: Uint8Array) {
     throwOnInvalidObject: true,
     updateMetadata: false,
   });
+
   return document.getPageCount();
 }
 
@@ -50,6 +51,7 @@ function buildObjectName(
 
 function parseGcsUri(uri: string) {
   const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(uri);
+
   if (!match) {
     throw new Error("Invalid GCS URI.");
   }
@@ -82,7 +84,7 @@ export const createDirectUploadTarget = action({
   }> => {
     const identity = await requireCurrentUser(ctx);
     const clients = createGoogleClients();
-    const provisionalDocumentId: Id<"documents"> = await ctx.runMutation(
+    const documentId: Id<"documents"> = await ctx.runMutation(
       internal.documents.reserveDirectUploadDocument,
       {
         filename: args.filename,
@@ -96,19 +98,22 @@ export const createDirectUploadTarget = action({
     try {
       const objectName = buildObjectName(
         clients.inputPrefix,
-        provisionalDocumentId,
+        documentId,
         args.filename,
       );
       const gcsUri = `gs://${clients.bucketName}/${objectName}`;
-
-      await ctx.runMutation(
-        internal.documentProcessingState.setDocumentInputGcsUri,
+      const updatedDocument = await ctx.runMutation(
+        internal.documents.setReservedDocumentInputGcsUri,
         {
-          documentId: provisionalDocumentId,
-          attemptNumber: 0,
+          documentId,
+          ownerTokenIdentifier: identity.tokenIdentifier,
           ocrGcsInputUri: gcsUri,
         },
       );
+
+      if (!updatedDocument) {
+        throw new Error("Could not reserve the direct upload target.");
+      }
 
       const [uploadUrl] = await clients.storageClient
         .bucket(clients.bucketName)
@@ -124,21 +129,21 @@ export const createDirectUploadTarget = action({
         DIRECT_UPLOAD_EXPIRY_MS,
         internal.documentUploads.expireDirectUploadReservation,
         {
-          documentId: provisionalDocumentId,
+          documentId,
           ownerTokenIdentifier: identity.tokenIdentifier,
           gcsUri,
         },
       );
 
       return {
-        documentId: provisionalDocumentId,
+        documentId,
         uploadUrl,
         gcsUri,
         method: "PUT",
       };
     } catch (error) {
       await ctx.runMutation(internal.documents.deleteReservedDocument, {
-        documentId: provisionalDocumentId,
+        documentId,
         ownerTokenIdentifier: identity.tokenIdentifier,
       });
 
@@ -160,7 +165,11 @@ export const expireDirectUploadReservation = internalAction({
       ownerTokenIdentifier: args.ownerTokenIdentifier,
     });
 
-    if (!document || document.ocrGcsInputUri !== args.gcsUri) {
+    if (
+      !document ||
+      document.status !== "uploading" ||
+      document.ocrGcsInputUri !== args.gcsUri
+    ) {
       return null;
     }
 

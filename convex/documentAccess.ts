@@ -8,6 +8,7 @@ import { createGoogleClients } from "./googleCloud";
 
 function parseGcsUri(uri: string) {
   const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(uri);
+
   if (!match) {
     throw new Error("Invalid GCS URI.");
   }
@@ -40,50 +41,12 @@ export const getDocumentPdfUrl = action({
       ownerTokenIdentifier: identity.tokenIdentifier,
     });
 
-    if (!document) {
+    if (!document?.ocrGcsInputUri) {
       return null;
-    }
-
-    if (!document.ocrGcsInputUri) {
-      if (!document.storageId) {
-        return null;
-      }
-
-      return await ctx.storage.getUrl(document.storageId);
     }
 
     const { storageClient } = createGoogleClients();
     const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
-    const [signedUrl] = await storageClient
-      .bucket(bucketName)
-      .file(objectName)
-      .getSignedUrl({
-        action: "read",
-        expires: Date.now() + 15 * 60 * 1000,
-      });
-
-    return signedUrl;
-  },
-});
-
-export const getDocumentFinalJsonUrl = action({
-  args: {
-    documentId: v.id("documents"),
-  },
-  returns: v.union(v.string(), v.null()),
-  handler: async (ctx, args): Promise<string | null> => {
-    const identity = await requireCurrentUser(ctx);
-    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
-      documentId: args.documentId,
-      ownerTokenIdentifier: identity.tokenIdentifier,
-    });
-
-    if (!document?.ocrFinalJsonGcsUri) {
-      return null;
-    }
-
-    const { storageClient } = createGoogleClients();
-    const { bucketName, objectName } = parseGcsUri(document.ocrFinalJsonGcsUri);
     const [signedUrl] = await storageClient
       .bucket(bucketName)
       .file(objectName)

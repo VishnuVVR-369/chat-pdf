@@ -17,8 +17,18 @@ export type WorkspaceDocument = {
   storageContentType?: string;
   storageSize: number;
   uploadCompletedAt: number;
+  processingStartedAt?: number;
+  ocrCompletedAt?: number;
+  embeddingsCompletedAt?: number;
+  lastProcessedAt?: number;
+  ocrMethod?: "document_ai_batch";
+  ocrProvider?: "google_document_ai";
+  ocrModelOrProcessor?: string;
+  embeddingModel?: string;
+  embeddedPageCount?: number;
   fileUrl: string | null;
   ocrGcsInputUri?: string;
+  ocrFinalJsonGcsUri?: string;
 };
 
 type SidebarProps = {

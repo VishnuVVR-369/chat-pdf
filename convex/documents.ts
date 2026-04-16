@@ -3,6 +3,16 @@ import { internal } from "./_generated/api";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { internalMutation, internalQuery, query } from "./_generated/server";
 
+const documentStatus = v.union(
+  v.literal("uploading"),
+  v.literal("uploaded"),
+  v.literal("processing"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+
+const ocrMethod = v.literal("document_ai_batch");
+
 type AuthenticatedCtx = QueryCtx | MutationCtx;
 
 async function requireCurrentUser(ctx: AuthenticatedCtx) {
@@ -23,7 +33,6 @@ export const reserveDirectUploadDocument = internalMutation({
   args: {
     filename: v.string(),
     ownerTokenIdentifier: v.string(),
-    gcsInputUri: v.optional(v.string()),
     contentType: v.optional(v.string()),
   },
   returns: v.id("documents"),
@@ -34,31 +43,43 @@ export const reserveDirectUploadDocument = internalMutation({
       originalFilename: args.filename,
       storageSize: 0,
       sha256: "",
-      status: "uploading",
+      status: "uploading" as const,
       uploadCompletedAt: Date.now(),
       processingAttemptCount: 0,
-    } as {
-      ownerTokenIdentifier: string;
-      title: string;
-      originalFilename: string;
-      storageContentType?: string;
-      storageSize: number;
-      sha256: string;
-      status: "uploading";
-      uploadCompletedAt: number;
-      processingAttemptCount: number;
-      ocrGcsInputUri?: string;
     };
 
-    if (args.contentType !== undefined) {
-      document.storageContentType = args.contentType;
+    return await ctx.db.insert("documents", {
+      ...document,
+      ...(args.contentType !== undefined
+        ? { storageContentType: args.contentType }
+        : {}),
+    });
+  },
+});
+
+export const setReservedDocumentInputGcsUri = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    ocrGcsInputUri: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
+      document.status !== "uploading"
+    ) {
+      return false;
     }
 
-    if (args.gcsInputUri !== undefined) {
-      document.ocrGcsInputUri = args.gcsInputUri;
-    }
+    await ctx.db.patch(args.documentId, {
+      ocrGcsInputUri: args.ocrGcsInputUri,
+    });
 
-    return await ctx.db.insert("documents", document);
+    return true;
   },
 });
 
@@ -77,45 +98,22 @@ export const completeDirectUploadRecord = internalMutation({
 
     if (
       !document ||
-      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
+      document.status !== "uploading"
     ) {
       return false;
     }
 
-    const rest = {
-      ...document,
-    } as Omit<typeof document, "_creationTime" | "_id" | "processingError"> & {
-      _creationTime?: number;
-      _id?: typeof document._id;
-      processingError?: string;
-    };
-    delete rest._creationTime;
-    delete rest._id;
-    delete rest.processingError;
-
-    const replacement = {
-      ...rest,
+    await ctx.db.patch(args.documentId, {
+      ...(args.contentType !== undefined
+        ? { storageContentType: args.contentType }
+        : {}),
       storageSize: args.storageSize,
       sha256: args.sha256,
       pageCount: args.pageCount,
       status: "uploaded",
       uploadCompletedAt: Date.now(),
-    } as Omit<typeof rest, "storageContentType"> & {
-      storageContentType?: string;
-      storageSize: number;
-      sha256: string;
-      pageCount: number;
-      status: "uploaded";
-      uploadCompletedAt: number;
-    };
-
-    delete replacement.storageContentType;
-
-    if (args.contentType !== undefined) {
-      replacement.storageContentType = args.contentType;
-    }
-
-    await ctx.db.replace(args.documentId, replacement);
+    });
 
     await ctx.scheduler.runAfter(
       0,
@@ -141,15 +139,13 @@ export const deleteReservedDocument = internalMutation({
 
     if (
       !document ||
-      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
+      document.status !== "uploading"
     ) {
       return null;
     }
 
-    if (document.status === "uploading") {
-      await ctx.db.delete(args.documentId);
-    }
-
+    await ctx.db.delete(args.documentId);
     return null;
   },
 });
@@ -162,20 +158,24 @@ export const listDocuments = query({
       _creationTime: v.number(),
       title: v.string(),
       originalFilename: v.string(),
-      status: v.union(
-        v.literal("uploading"),
-        v.literal("uploaded"),
-        v.literal("processing"),
-        v.literal("ready"),
-        v.literal("failed"),
-      ),
+      status: documentStatus,
       pageCount: v.optional(v.number()),
       processingError: v.optional(v.string()),
       storageContentType: v.optional(v.string()),
       storageSize: v.number(),
       uploadCompletedAt: v.number(),
-      fileUrl: v.union(v.string(), v.null()),
+      processingStartedAt: v.optional(v.number()),
+      ocrCompletedAt: v.optional(v.number()),
+      embeddingsCompletedAt: v.optional(v.number()),
+      lastProcessedAt: v.optional(v.number()),
+      ocrMethod: v.optional(ocrMethod),
+      ocrProvider: v.optional(v.literal("google_document_ai")),
+      ocrModelOrProcessor: v.optional(v.string()),
+      embeddingModel: v.optional(v.string()),
+      embeddedPageCount: v.optional(v.number()),
       ocrGcsInputUri: v.optional(v.string()),
+      ocrFinalJsonGcsUri: v.optional(v.string()),
+      fileUrl: v.union(v.string(), v.null()),
     }),
   ),
   handler: async (ctx) => {
@@ -188,51 +188,30 @@ export const listDocuments = query({
       .order("desc")
       .take(50);
 
-    return await Promise.all(
-      documents.map(async (document) => {
-        const result = {
-          _id: document._id,
-          _creationTime: document._creationTime,
-          title: document.title,
-          originalFilename: document.originalFilename,
-          status: document.status,
-          storageSize: document.storageSize,
-          uploadCompletedAt: document.uploadCompletedAt,
-          fileUrl: null,
-        } as {
-          _id: typeof document._id;
-          _creationTime: number;
-          title: string;
-          originalFilename: string;
-          status: typeof document.status;
-          pageCount?: number;
-          processingError?: string;
-          storageContentType?: string;
-          storageSize: number;
-          uploadCompletedAt: number;
-          fileUrl: null;
-          ocrGcsInputUri?: string;
-        };
-
-        if (document.pageCount !== undefined) {
-          result.pageCount = document.pageCount;
-        }
-
-        if (document.processingError !== undefined) {
-          result.processingError = document.processingError;
-        }
-
-        if (document.storageContentType !== undefined) {
-          result.storageContentType = document.storageContentType;
-        }
-
-        if (document.ocrGcsInputUri !== undefined) {
-          result.ocrGcsInputUri = document.ocrGcsInputUri;
-        }
-
-        return result;
-      }),
-    );
+    return documents.map((document) => ({
+      _id: document._id,
+      _creationTime: document._creationTime,
+      title: document.title,
+      originalFilename: document.originalFilename,
+      status: document.status,
+      pageCount: document.pageCount,
+      processingError: document.processingError,
+      storageContentType: document.storageContentType,
+      storageSize: document.storageSize,
+      uploadCompletedAt: document.uploadCompletedAt,
+      processingStartedAt: document.processingStartedAt,
+      ocrCompletedAt: document.ocrCompletedAt,
+      embeddingsCompletedAt: document.embeddingsCompletedAt,
+      lastProcessedAt: document.lastProcessedAt,
+      ocrMethod: document.ocrMethod,
+      ocrProvider: document.ocrProvider,
+      ocrModelOrProcessor: document.ocrModelOrProcessor,
+      embeddingModel: document.embeddingModel,
+      embeddedPageCount: document.embeddedPageCount,
+      ocrGcsInputUri: document.ocrGcsInputUri,
+      ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri,
+      fileUrl: null,
+    }));
   },
 });
 
@@ -245,8 +224,9 @@ export const getOwnedDocument = internalQuery({
     v.object({
       _id: v.id("documents"),
       ownerTokenIdentifier: v.string(),
+      status: documentStatus,
+      title: v.string(),
       originalFilename: v.string(),
-      storageId: v.optional(v.id("_storage")),
       ocrGcsInputUri: v.optional(v.string()),
       ocrFinalJsonGcsUri: v.optional(v.string()),
     }),
@@ -262,31 +242,18 @@ export const getOwnedDocument = internalQuery({
       return null;
     }
 
-    const result = {
+    return {
       _id: document._id,
       ownerTokenIdentifier: document.ownerTokenIdentifier,
+      status: document.status,
+      title: document.title,
       originalFilename: document.originalFilename,
-    } as {
-      _id: typeof document._id;
-      ownerTokenIdentifier: string;
-      originalFilename: string;
-      storageId?: typeof document.storageId;
-      ocrGcsInputUri?: string;
-      ocrFinalJsonGcsUri?: string;
+      ...(document.ocrGcsInputUri !== undefined
+        ? { ocrGcsInputUri: document.ocrGcsInputUri }
+        : {}),
+      ...(document.ocrFinalJsonGcsUri !== undefined
+        ? { ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri }
+        : {}),
     };
-
-    if (document.storageId !== undefined) {
-      result.storageId = document.storageId;
-    }
-
-    if (document.ocrGcsInputUri !== undefined) {
-      result.ocrGcsInputUri = document.ocrGcsInputUri;
-    }
-
-    if (document.ocrFinalJsonGcsUri !== undefined) {
-      result.ocrFinalJsonGcsUri = document.ocrFinalJsonGcsUri;
-    }
-
-    return result;
   },
 });

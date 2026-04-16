@@ -73,13 +73,10 @@ export function loadGoogleCloudConfig() {
 
   const projectId = getRequiredEnv(
     "GOOGLE_DOCUMENTAI_PROJECT_ID",
-    credentials.project_id ?? "962032253660",
+    credentials.project_id,
   );
   const location = getRequiredEnv("GOOGLE_DOCUMENTAI_LOCATION", "asia-south1");
-  const processorId = getRequiredEnv(
-    "GOOGLE_DOCUMENTAI_PROCESSOR_ID",
-    "9793d76a76692d2a",
-  );
+  const processorId = getRequiredEnv("GOOGLE_DOCUMENTAI_PROCESSOR_ID");
   const bucketName = getRequiredEnv("GOOGLE_DOCUMENTAI_GCS_BUCKET");
   const inputPrefix = process.env.GOOGLE_DOCUMENTAI_GCS_INPUT_PREFIX ?? "input";
   const outputPrefix =
