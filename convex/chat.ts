@@ -73,10 +73,10 @@ function buildAnswerFromChunks(
     content: `${lead}\n\n${supportText}`,
     citations: citedChunks.map((chunk) => ({
       documentId: chunk.documentId,
+      documentTitle,
       chunkId: chunk._id,
       pageNumber: chunk.startPageNumber,
       snippet: clipText(chunk.text, 220),
-      highlightedText: undefined,
     })),
   };
 }

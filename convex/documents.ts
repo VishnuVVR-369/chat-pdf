@@ -28,18 +28,37 @@ export const reserveDirectUploadDocument = internalMutation({
   },
   returns: v.id("documents"),
   handler: async (ctx, args) => {
-    return await ctx.db.insert("documents", {
+    const document = {
       ownerTokenIdentifier: args.ownerTokenIdentifier,
       title: deriveDocumentTitle(args.filename),
       originalFilename: args.filename,
-      storageContentType: args.contentType,
       storageSize: 0,
       sha256: "",
       status: "uploading",
       uploadCompletedAt: Date.now(),
       processingAttemptCount: 0,
-      ocrGcsInputUri: args.gcsInputUri,
-    });
+    } as {
+      ownerTokenIdentifier: string;
+      title: string;
+      originalFilename: string;
+      storageContentType?: string;
+      storageSize: number;
+      sha256: string;
+      status: "uploading";
+      uploadCompletedAt: number;
+      processingAttemptCount: number;
+      ocrGcsInputUri?: string;
+    };
+
+    if (args.contentType !== undefined) {
+      document.storageContentType = args.contentType;
+    }
+
+    if (args.gcsInputUri !== undefined) {
+      document.ocrGcsInputUri = args.gcsInputUri;
+    }
+
+    return await ctx.db.insert("documents", document);
   },
 });
 
@@ -74,15 +93,29 @@ export const completeDirectUploadRecord = internalMutation({
     delete rest._id;
     delete rest.processingError;
 
-    await ctx.db.replace(args.documentId, {
+    const replacement = {
       ...rest,
-      storageContentType: args.contentType,
       storageSize: args.storageSize,
       sha256: args.sha256,
       pageCount: args.pageCount,
       status: "uploaded",
       uploadCompletedAt: Date.now(),
-    });
+    } as Omit<typeof rest, "storageContentType"> & {
+      storageContentType?: string;
+      storageSize: number;
+      sha256: string;
+      pageCount: number;
+      status: "uploaded";
+      uploadCompletedAt: number;
+    };
+
+    delete replacement.storageContentType;
+
+    if (args.contentType !== undefined) {
+      replacement.storageContentType = args.contentType;
+    }
+
+    await ctx.db.replace(args.documentId, replacement);
 
     await ctx.scheduler.runAfter(
       0,
@@ -156,20 +189,49 @@ export const listDocuments = query({
       .take(50);
 
     return await Promise.all(
-      documents.map(async (document) => ({
-        _id: document._id,
-        _creationTime: document._creationTime,
-        title: document.title,
-        originalFilename: document.originalFilename,
-        status: document.status,
-        pageCount: document.pageCount,
-        processingError: document.processingError,
-        storageContentType: document.storageContentType,
-        storageSize: document.storageSize,
-        uploadCompletedAt: document.uploadCompletedAt,
-        fileUrl: null,
-        ocrGcsInputUri: document.ocrGcsInputUri,
-      })),
+      documents.map(async (document) => {
+        const result = {
+          _id: document._id,
+          _creationTime: document._creationTime,
+          title: document.title,
+          originalFilename: document.originalFilename,
+          status: document.status,
+          storageSize: document.storageSize,
+          uploadCompletedAt: document.uploadCompletedAt,
+          fileUrl: null,
+        } as {
+          _id: typeof document._id;
+          _creationTime: number;
+          title: string;
+          originalFilename: string;
+          status: typeof document.status;
+          pageCount?: number;
+          processingError?: string;
+          storageContentType?: string;
+          storageSize: number;
+          uploadCompletedAt: number;
+          fileUrl: null;
+          ocrGcsInputUri?: string;
+        };
+
+        if (document.pageCount !== undefined) {
+          result.pageCount = document.pageCount;
+        }
+
+        if (document.processingError !== undefined) {
+          result.processingError = document.processingError;
+        }
+
+        if (document.storageContentType !== undefined) {
+          result.storageContentType = document.storageContentType;
+        }
+
+        if (document.ocrGcsInputUri !== undefined) {
+          result.ocrGcsInputUri = document.ocrGcsInputUri;
+        }
+
+        return result;
+      }),
     );
   },
 });
@@ -200,13 +262,31 @@ export const getOwnedDocument = internalQuery({
       return null;
     }
 
-    return {
+    const result = {
       _id: document._id,
       ownerTokenIdentifier: document.ownerTokenIdentifier,
       originalFilename: document.originalFilename,
-      storageId: document.storageId,
-      ocrGcsInputUri: document.ocrGcsInputUri,
-      ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri,
+    } as {
+      _id: typeof document._id;
+      ownerTokenIdentifier: string;
+      originalFilename: string;
+      storageId?: typeof document.storageId;
+      ocrGcsInputUri?: string;
+      ocrFinalJsonGcsUri?: string;
     };
+
+    if (document.storageId !== undefined) {
+      result.storageId = document.storageId;
+    }
+
+    if (document.ocrGcsInputUri !== undefined) {
+      result.ocrGcsInputUri = document.ocrGcsInputUri;
+    }
+
+    if (document.ocrFinalJsonGcsUri !== undefined) {
+      result.ocrFinalJsonGcsUri = document.ocrFinalJsonGcsUri;
+    }
+
+    return result;
   },
 });

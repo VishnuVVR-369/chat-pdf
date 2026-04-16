@@ -677,9 +677,15 @@ export const runDocumentOcr = internalAction({
           attemptNumber: args.attemptNumber,
           ocrMethod: result.method,
           ocrModelOrProcessor: clients.processorName,
-          ocrGcsInputUri: batchMetadata?.inputUri,
-          ocrGcsOutputPrefix: batchMetadata?.outputPrefix,
-          ocrFinalJsonGcsUri: finalJsonGcsUri,
+          ...(batchMetadata?.inputUri !== undefined
+            ? { ocrGcsInputUri: batchMetadata.inputUri }
+            : {}),
+          ...(batchMetadata?.outputPrefix !== undefined
+            ? { ocrGcsOutputPrefix: batchMetadata.outputPrefix }
+            : {}),
+          ...(finalJsonGcsUri !== undefined
+            ? { ocrFinalJsonGcsUri: finalJsonGcsUri }
+            : {}),
         },
       );
     } catch (error) {
@@ -714,9 +720,13 @@ export const runDocumentOcr = internalAction({
           documentId: document.documentId,
           attemptNumber: args.attemptNumber,
           errorMessage: getDisplayErrorMessage(error),
-          ocrMethod,
-          ocrGcsInputUri: batchMetadata?.inputUri,
-          ocrGcsOutputPrefix: batchMetadata?.outputPrefix,
+          ...(ocrMethod !== undefined ? { ocrMethod } : {}),
+          ...(batchMetadata?.inputUri !== undefined
+            ? { ocrGcsInputUri: batchMetadata.inputUri }
+            : {}),
+          ...(batchMetadata?.outputPrefix !== undefined
+            ? { ocrGcsOutputPrefix: batchMetadata.outputPrefix }
+            : {}),
         },
       );
     }

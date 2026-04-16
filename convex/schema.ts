@@ -132,13 +132,16 @@ export default defineSchema({
     .index("by_chatSessionId", ["chatSessionId"]),
   citations: defineTable({
     ownerTokenIdentifier: v.string(),
+    chatSessionId: v.optional(v.id("chatSessions")),
     messageId: v.id("messages"),
     documentId: v.id("documents"),
+    documentTitle: v.optional(v.string()),
     chunkId: v.optional(v.id("documentChunks")),
     pageNumber: v.number(),
     snippet: v.string(),
     highlightedText: v.optional(v.string()),
   })
+    .index("by_chatSessionId_and_messageId", ["chatSessionId", "messageId"])
     .index("by_ownerTokenIdentifier_and_messageId", [
       "ownerTokenIdentifier",
       "messageId",

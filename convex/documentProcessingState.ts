@@ -107,9 +107,10 @@ export const setDocumentInputGcsUri = internalMutation({
 
     const replacement: DocumentReplacement = {
       ...withoutProcessingArtifacts(document),
-      storageId: undefined,
       ocrGcsInputUri: args.ocrGcsInputUri,
     };
+
+    delete replacement.storageId;
 
     await ctx.db.replace(args.documentId, replacement);
 
@@ -217,16 +218,30 @@ export const insertDocumentChunkBatch = internalMutation({
     const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
 
     for (const chunk of args.chunks) {
-      await ctx.db.insert("documentChunks", {
+      const documentChunk = {
         ownerTokenIdentifier: args.ownerTokenIdentifier,
         ownerDocumentKey,
         documentId: args.documentId,
         startPageNumber: chunk.startPageNumber,
         endPageNumber: chunk.endPageNumber,
         text: chunk.text,
-        tokenCount: chunk.tokenCount,
         embedding: chunk.embedding,
-      });
+      } as {
+        ownerTokenIdentifier: string;
+        ownerDocumentKey: string;
+        documentId: typeof args.documentId;
+        startPageNumber: number;
+        endPageNumber: number;
+        text: string;
+        tokenCount?: number;
+        embedding: number[];
+      };
+
+      if (chunk.tokenCount !== undefined) {
+        documentChunk.tokenCount = chunk.tokenCount;
+      }
+
+      await ctx.db.insert("documentChunks", documentChunk);
     }
 
     return null;

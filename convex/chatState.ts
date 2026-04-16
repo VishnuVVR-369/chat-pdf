@@ -147,13 +147,24 @@ export const createMessage = internalMutation({
       throw new Error("Chat session not found.");
     }
 
-    const messageId = await ctx.db.insert("messages", {
+    const message = {
       ownerTokenIdentifier: args.ownerTokenIdentifier,
       chatSessionId: args.chatSessionId,
       role: args.role,
       content: args.content,
-      answerStatus: args.answerStatus,
-    });
+    } as {
+      ownerTokenIdentifier: string;
+      chatSessionId: typeof args.chatSessionId;
+      role: "system" | "user" | "assistant";
+      content: string;
+      answerStatus?: "grounded" | "weak_evidence" | "not_found";
+    };
+
+    if (args.answerStatus !== undefined) {
+      message.answerStatus = args.answerStatus;
+    }
+
+    const messageId = await ctx.db.insert("messages", message);
 
     await ctx.db.patch(args.chatSessionId, {
       lastMessageAt: Date.now(),
@@ -170,6 +181,7 @@ export const insertMessageCitations = internalMutation({
     citations: v.array(
       v.object({
         documentId: v.id("documents"),
+        documentTitle: v.string(),
         chunkId: v.optional(v.id("documentChunks")),
         pageNumber: v.number(),
         snippet: v.string(),
@@ -189,15 +201,35 @@ export const insertMessageCitations = internalMutation({
     }
 
     for (const citation of args.citations) {
-      await ctx.db.insert("citations", {
+      const citationDocument = {
         ownerTokenIdentifier: args.ownerTokenIdentifier,
+        chatSessionId: message.chatSessionId,
         messageId: args.messageId,
         documentId: citation.documentId,
-        chunkId: citation.chunkId,
+        documentTitle: citation.documentTitle,
         pageNumber: citation.pageNumber,
         snippet: citation.snippet,
-        highlightedText: citation.highlightedText,
-      });
+      } as {
+        ownerTokenIdentifier: string;
+        chatSessionId: typeof message.chatSessionId;
+        messageId: typeof args.messageId;
+        documentId: typeof citation.documentId;
+        documentTitle: string;
+        chunkId?: typeof citation.chunkId;
+        pageNumber: number;
+        snippet: string;
+        highlightedText?: string;
+      };
+
+      if (citation.chunkId !== undefined) {
+        citationDocument.chunkId = citation.chunkId;
+      }
+
+      if (citation.highlightedText !== undefined) {
+        citationDocument.highlightedText = citation.highlightedText;
+      }
+
+      await ctx.db.insert("citations", citationDocument);
     }
 
     return null;
@@ -233,6 +265,15 @@ export const getDocumentChat = query({
   }),
   handler: async (ctx, args) => {
     const identity = await requireCurrentUser(ctx);
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== identity.tokenIdentifier
+    ) {
+      throw new Error("Document not found.");
+    }
+
     const link = await ctx.db
       .query("chatSessionDocuments")
       .withIndex("by_ownerTokenIdentifier_and_documentId", (q) =>
@@ -260,40 +301,97 @@ export const getDocumentChat = query({
       .take(40);
 
     const orderedMessages = [...messages].reverse();
+    const bulkCitations = await ctx.db
+      .query("citations")
+      .withIndex("by_chatSessionId_and_messageId", (q) =>
+        q.eq("chatSessionId", link.chatSessionId),
+      )
+      .take(240);
+
+    const citationsByMessageId = new Map<
+      (typeof orderedMessages)[number]["_id"],
+      (typeof bulkCitations)[number][]
+    >();
+
+    for (const citation of bulkCitations) {
+      const currentCitations = citationsByMessageId.get(citation.messageId) ?? [];
+      currentCitations.push(citation);
+      citationsByMessageId.set(citation.messageId, currentCitations);
+    }
+
+    const fallbackMessageIds = orderedMessages
+      .filter(
+        (message) =>
+          message.role === "assistant" && !citationsByMessageId.has(message._id),
+      )
+      .map((message) => message._id);
+
+    for (const messageId of fallbackMessageIds) {
+      const messageCitations = await ctx.db
+        .query("citations")
+        .withIndex("by_ownerTokenIdentifier_and_messageId", (q) =>
+          q
+            .eq("ownerTokenIdentifier", identity.tokenIdentifier)
+            .eq("messageId", messageId),
+        )
+        .take(6);
+
+      citationsByMessageId.set(messageId, messageCitations);
+    }
+
+    const citationDocumentIds = Array.from(
+      new Set(
+        Array.from(citationsByMessageId.values())
+          .flat()
+          .filter((citation) => citation.documentTitle === undefined)
+          .map((citation) => citation.documentId),
+      ),
+    );
+    const documentTitlesById = new Map<typeof document._id, string>([
+      [document._id, document.title],
+    ]);
+
+    for (const documentId of citationDocumentIds) {
+      if (documentTitlesById.has(documentId)) {
+        continue;
+      }
+
+      const citationDocument = await ctx.db.get(documentId);
+      if (citationDocument) {
+        documentTitlesById.set(documentId, citationDocument.title);
+      }
+    }
 
     return {
       chatSessionId: link.chatSessionId,
-      messages: await Promise.all(
-        orderedMessages.map(async (message) => {
-          const citations = await ctx.db
-            .query("citations")
-            .withIndex("by_messageId", (q) => q.eq("messageId", message._id))
-            .take(6);
-
-          return {
-            _id: message._id,
-            _creationTime: message._creationTime,
-            role: message.role,
-            content: message.content,
-            answerStatus: message.answerStatus,
-            citations: await Promise.all(
-              citations.map(async (citation) => {
-                const document = await ctx.db.get(citation.documentId);
-
-                return {
-                  _id: citation._id,
-                  documentId: citation.documentId,
-                  documentTitle: document?.title ?? "Document",
-                  chunkId: citation.chunkId,
-                  pageNumber: citation.pageNumber,
-                  snippet: citation.snippet,
-                  highlightedText: citation.highlightedText,
-                };
-              }),
-            ),
-          };
-        }),
-      ),
+      messages: orderedMessages.map((message) => {
+        const citations = citationsByMessageId.get(message._id) ?? [];
+        return {
+          _id: message._id,
+          _creationTime: message._creationTime,
+          role: message.role,
+          content: message.content,
+          ...(message.answerStatus !== undefined
+            ? { answerStatus: message.answerStatus }
+            : {}),
+          citations: citations.map((citation) => ({
+            _id: citation._id,
+            documentId: citation.documentId,
+            documentTitle:
+              citation.documentTitle ??
+              documentTitlesById.get(citation.documentId) ??
+              "Document",
+            ...(citation.chunkId !== undefined
+              ? { chunkId: citation.chunkId }
+              : {}),
+            pageNumber: citation.pageNumber,
+            snippet: citation.snippet,
+            ...(citation.highlightedText !== undefined
+              ? { highlightedText: citation.highlightedText }
+              : {}),
+          })),
+        };
+      }),
     };
   },
 });

@@ -6,9 +6,11 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { createGoogleClients } from "./googleCloud";
 import { MAX_PDF_PAGES } from "../src/constants/pdf";
+
+const DIRECT_UPLOAD_EXPIRY_MS = 30 * 60 * 1000;
 
 function isPasswordProtectedPdfError(error: unknown) {
   return (
@@ -85,42 +87,96 @@ export const createDirectUploadTarget = action({
       {
         filename: args.filename,
         ownerTokenIdentifier: identity.tokenIdentifier,
-        contentType: args.contentType,
+        ...(args.contentType !== undefined
+          ? { contentType: args.contentType }
+          : {}),
       },
     );
 
-    const objectName = buildObjectName(
-      clients.inputPrefix,
-      provisionalDocumentId,
-      args.filename,
-    );
-    const gcsUri = `gs://${clients.bucketName}/${objectName}`;
+    try {
+      const objectName = buildObjectName(
+        clients.inputPrefix,
+        provisionalDocumentId,
+        args.filename,
+      );
+      const gcsUri = `gs://${clients.bucketName}/${objectName}`;
 
-    await ctx.runMutation(
-      internal.documentProcessingState.setDocumentInputGcsUri,
-      {
+      await ctx.runMutation(
+        internal.documentProcessingState.setDocumentInputGcsUri,
+        {
+          documentId: provisionalDocumentId,
+          attemptNumber: 0,
+          ocrGcsInputUri: gcsUri,
+        },
+      );
+
+      const [uploadUrl] = await clients.storageClient
+        .bucket(clients.bucketName)
+        .file(objectName)
+        .getSignedUrl({
+          version: "v4",
+          action: "write",
+          expires: Date.now() + 15 * 60 * 1000,
+          contentType: args.contentType ?? "application/pdf",
+        });
+
+      await ctx.scheduler.runAfter(
+        DIRECT_UPLOAD_EXPIRY_MS,
+        internal.documentUploads.expireDirectUploadReservation,
+        {
+          documentId: provisionalDocumentId,
+          ownerTokenIdentifier: identity.tokenIdentifier,
+          gcsUri,
+        },
+      );
+
+      return {
         documentId: provisionalDocumentId,
-        attemptNumber: 0,
-        ocrGcsInputUri: gcsUri,
-      },
-    );
-
-    const [uploadUrl] = await clients.storageClient
-      .bucket(clients.bucketName)
-      .file(objectName)
-      .getSignedUrl({
-        version: "v4",
-        action: "write",
-        expires: Date.now() + 15 * 60 * 1000,
-        contentType: args.contentType ?? "application/pdf",
+        uploadUrl,
+        gcsUri,
+        method: "PUT",
+      };
+    } catch (error) {
+      await ctx.runMutation(internal.documents.deleteReservedDocument, {
+        documentId: provisionalDocumentId,
+        ownerTokenIdentifier: identity.tokenIdentifier,
       });
 
-    return {
-      documentId: provisionalDocumentId,
-      uploadUrl,
-      gcsUri,
-      method: "PUT",
-    };
+      throw error;
+    }
+  },
+});
+
+export const expireDirectUploadReservation = internalAction({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    gcsUri: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier: args.ownerTokenIdentifier,
+    });
+
+    if (!document || document.ocrGcsInputUri !== args.gcsUri) {
+      return null;
+    }
+
+    const { storageClient } = createGoogleClients();
+    const { bucketName, objectName } = parseGcsUri(args.gcsUri);
+    await storageClient
+      .bucket(bucketName)
+      .file(objectName)
+      .delete({ ignoreNotFound: true });
+
+    await ctx.runMutation(internal.documents.deleteReservedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier: args.ownerTokenIdentifier,
+    });
+
+    return null;
   },
 });
 
