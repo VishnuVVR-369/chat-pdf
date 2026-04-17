@@ -247,8 +247,8 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
             </div>
           ) : selectedDocument ? (
             <>
-              <div className="hidden flex-1 lg:flex">
-                <div className="min-w-0 flex-1 border-r border-stone-800/60">
+              <div className="hidden min-h-0 flex-1 lg:flex">
+                <div className="min-w-0 flex-[0.95] border-r border-stone-800/60">
                   <PdfViewer
                     key={selectedDocument._id}
                     document={selectedDocument}
@@ -261,7 +261,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                     resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
-                <div className="w-[380px] shrink-0 xl:w-[420px]">
+                <div className="w-[440px] min-w-0 shrink-0 xl:w-[500px] 2xl:w-[540px]">
                   {selectedDocument.status === "ready" ? (
                     <ChatPanel
                       key={selectedDocument._id}

@@ -61,16 +61,42 @@ export function PdfPreview({
   pageNumber,
   url,
 }: PdfPreviewProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageCountChangeRef = useRef(onPageCountChange);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [isRenderingPage, setIsRenderingPage] = useState(false);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
     pageCountChangeRef.current = onPageCountChange;
   }, [onPageCountChange]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) {
+      return;
+    }
+
+    const updateSize = () => {
+      setContainerSize({
+        width: container.clientWidth,
+        height: container.clientHeight,
+      });
+    };
+
+    updateSize();
+
+    const resizeObserver = new ResizeObserver(updateSize);
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   useEffect(() => {
     if (!file && !url) {
@@ -179,13 +205,33 @@ export function PdfPreview({
           return;
         }
 
-        const viewport = pdfPage.getViewport({ scale: 1.45 });
         const canvas = canvasRef.current;
+        const container = containerRef.current;
 
-        if (!canvas) {
+        if (!canvas || !container) {
           return;
         }
 
+        const baseViewport = pdfPage.getViewport({ scale: 1 });
+        const horizontalPadding = 48;
+        const verticalPadding = 48;
+        const fitSafetyMargin = 4;
+        const maxWidth = Math.max(
+          container.clientWidth - horizontalPadding - fitSafetyMargin,
+          160,
+        );
+        const maxHeight = Math.max(
+          container.clientHeight - verticalPadding - fitSafetyMargin,
+          220,
+        );
+        const scale = Math.max(
+          Math.min(
+            maxWidth / baseViewport.width,
+            maxHeight / baseViewport.height,
+          ),
+          0.25,
+        );
+        const viewport = pdfPage.getViewport({ scale });
         const context = canvas.getContext("2d");
 
         if (!context) {
@@ -195,8 +241,8 @@ export function PdfPreview({
         const devicePixelRatio = window.devicePixelRatio || 1;
         canvas.width = Math.floor(viewport.width * devicePixelRatio);
         canvas.height = Math.floor(viewport.height * devicePixelRatio);
-        canvas.style.width = "100%";
-        canvas.style.height = "auto";
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
 
         context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
         renderTask = pdfPage.render({
@@ -222,7 +268,7 @@ export function PdfPreview({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pageNumber, pdfDocument]);
+  }, [containerSize.height, containerSize.width, pageNumber, pdfDocument]);
 
   const isRendering = isLoadingDocument || isRenderingPage;
 
@@ -240,8 +286,11 @@ export function PdfPreview({
   }
 
   return (
-    <div className="relative h-full overflow-hidden bg-[#090909]">
-      <div className="relative flex min-h-full justify-center overflow-auto bg-stone-950/90">
+    <div
+      ref={containerRef}
+      className="relative h-full overflow-hidden bg-[#090909]"
+    >
+      <div className="relative flex h-full items-center justify-center overflow-hidden bg-stone-950/90 p-6">
         {isRendering ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090909]/75 backdrop-blur-sm">
             <div className="inline-flex items-center gap-3 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 text-sm text-amber-300">
@@ -251,10 +300,10 @@ export function PdfPreview({
           </div>
         ) : null}
 
-        <div className="flex min-h-full w-full justify-center">
+        <div className="flex h-full w-full items-center justify-center overflow-hidden">
           <canvas
             ref={canvasRef}
-            className="block max-w-full bg-white shadow-[0_24px_70px_-40px_rgba(255,255,255,0.25)]"
+            className="block max-w-none rounded-sm bg-white shadow-[0_24px_70px_-40px_rgba(255,255,255,0.25)]"
           />
         </div>
       </div>

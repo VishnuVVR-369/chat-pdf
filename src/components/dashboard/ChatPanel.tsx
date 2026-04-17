@@ -47,7 +47,7 @@ export function ChatPanel({ document, currentPage }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 border-b border-stone-800/60 px-4 py-3">
         <div className="min-w-0">
@@ -171,7 +171,7 @@ function ChatConversation({
   return (
     <>
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {displayMessages.length === 0 && !isGenerating ? (
           <div className="flex h-full items-center justify-center">
             <div className="max-w-xs text-center">
@@ -241,19 +241,19 @@ function ChatConversation({
       )}
 
       {/* Composer */}
-      <div className="border-t border-stone-800/60 p-3">
+      <div className="shrink-0 border-t border-stone-800/60 bg-[#090909] p-4">
         {currentPage && (
-          <p className="mb-1.5 px-1 text-[11px] text-stone-600">
+          <p className="mb-2 px-1 text-[11px] text-stone-600">
             Viewing page {currentPage}
           </p>
         )}
         <form
-          className="flex items-end gap-2 rounded-xl border border-stone-700/40 bg-stone-900/40 px-3 py-2"
+          className="flex items-end gap-3 rounded-2xl border border-stone-700/40 bg-stone-900/70 px-4 py-3"
           onSubmit={handleSubmit}
         >
           <textarea
             ref={textareaRef}
-            className="max-h-[120px] min-h-[20px] flex-1 resize-none bg-transparent text-sm leading-relaxed text-stone-200 outline-none placeholder:text-stone-600"
+            className="max-h-[144px] min-h-[48px] flex-1 resize-none bg-transparent text-sm leading-relaxed text-stone-200 outline-none placeholder:text-stone-600"
             disabled={isGenerating}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -268,7 +268,7 @@ function ChatConversation({
           />
           <button
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+              "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors",
               input.trim() && !isGenerating
                 ? "bg-amber-500 text-[#070707] hover:bg-amber-400"
                 : "bg-stone-800/60 text-stone-600",
