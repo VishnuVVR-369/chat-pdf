@@ -26,7 +26,10 @@ export function BrandLogo({
         width={1024}
       />
       <span
-        className={cn("text-lg font-semibold tracking-tight", textClassName)}
+        className={cn(
+          "text-lg font-semibold tracking-[-0.02em]",
+          textClassName,
+        )}
       >
         ChatPDF
       </span>
