@@ -57,9 +57,6 @@ export function Sidebar({
   selectedDocumentId,
 }: SidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [hoveredDocId, setHoveredDocId] = useState<Id<"documents"> | null>(
-    null,
-  );
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const filteredDocuments = normalizedSearchQuery
     ? documents.filter((document) => {
@@ -173,7 +170,14 @@ export function Sidebar({
         </div>
 
         {/* Document list */}
-        <div className="scrollbar-thin mt-4 flex-1 overflow-y-auto px-2">
+        <div
+          className={cn(
+            "mt-4 flex-1 overflow-y-auto px-2",
+            collapsed
+              ? "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              : "scrollbar-thin",
+          )}
+        >
           <AnimatePresence mode="wait">
             {!collapsed && (
               <motion.div
@@ -240,8 +244,6 @@ export function Sidebar({
                     duration: 0.25,
                     delay: Math.min(index * 0.03, 0.3),
                   }}
-                  onHoverStart={() => setHoveredDocId(doc._id)}
-                  onHoverEnd={() => setHoveredDocId(null)}
                 >
                   {/* Selected indicator bar */}
                   {isSelected && (
@@ -265,6 +267,7 @@ export function Sidebar({
                       collapsed && "justify-center px-0",
                     )}
                     onClick={() => onDocumentSelect(doc._id)}
+                    title={collapsed ? doc.title : undefined}
                     type="button"
                   >
                     <span
@@ -277,22 +280,6 @@ export function Sidebar({
                     >
                       <PdfIcon />
                     </span>
-
-                    {/* Tooltip for collapsed mode */}
-                    <AnimatePresence>
-                      {collapsed && hoveredDocId === doc._id && (
-                        <motion.div
-                          className="absolute left-[calc(100%+8px)] z-50 rounded-lg border border-white/[0.08] bg-[#18181b]/95 px-3 py-1.5 text-xs font-medium text-stone-200 shadow-xl backdrop-blur-md"
-                          initial={{ opacity: 0, x: -4 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -4 }}
-                          transition={{ duration: 0.12 }}
-                        >
-                          {doc.title}
-                          <div className="absolute top-1/2 left-0 -translate-x-1 -translate-y-1/2 border-4 border-transparent border-r-[#18181b]/95" />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
 
                     {!collapsed && (
                       <motion.div
@@ -352,23 +339,13 @@ export function Sidebar({
             )}
           >
             {collapsed ? (
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center">
                 <div className="relative">
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-[11px] font-bold text-[#070707]">
                     {(name ?? email ?? "U").slice(0, 1).toUpperCase()}
                   </div>
                   <div className="absolute -inset-0.5 -z-10 rounded-full bg-gradient-to-br from-amber-400/20 to-orange-500/20 opacity-60 blur-sm" />
                 </div>
-                <motion.button
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-stone-600 transition-colors hover:bg-white/[0.06] hover:text-stone-400"
-                  disabled={isSigningOut}
-                  onClick={onSignOut}
-                  type="button"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
-                >
-                  <LogoutIcon />
-                </motion.button>
               </div>
             ) : (
               <div className="flex items-center gap-2.5 rounded-lg px-1 py-1 transition-colors hover:bg-white/[0.03]">
