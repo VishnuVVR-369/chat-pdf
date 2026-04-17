@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { DashboardWorkspaceEntry } from "@/components/dashboard/DashboardWorkspaceEntry";
+import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace";
 import { fetchAuthQuery, isAuthenticated } from "@/lib/auth-server";
 import { api } from "../../../convex/_generated/api";
 
@@ -14,11 +14,5 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  return (
-    <DashboardWorkspaceEntry
-      email={user.email}
-      name={user.name}
-      tokenIdentifier={user.tokenIdentifier}
-    />
-  );
+  return <DashboardWorkspace email={user.email} name={user.name} />;
 }

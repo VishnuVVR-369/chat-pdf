@@ -1,13 +1,44 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import {
-  internalMutation,
-  internalQuery,
-  mutation,
-  query,
-} from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+
+const documentStatusValidator = v.union(
+  v.literal("uploading"),
+  v.literal("uploaded"),
+  v.literal("processing"),
+  v.literal("ready"),
+  v.literal("failed"),
+);
+const ocrMethodValidator = v.literal("document_ai_batch");
+const documentListItemValidator = v.object({
+  _id: v.id("documents"),
+  _creationTime: v.number(),
+  title: v.string(),
+  originalFilename: v.string(),
+  status: documentStatusValidator,
+  pageCount: v.optional(v.number()),
+  processingError: v.optional(v.string()),
+  storageContentType: v.optional(v.string()),
+  storageSize: v.number(),
+  uploadCompletedAt: v.number(),
+  processingStartedAt: v.optional(v.number()),
+  ocrCompletedAt: v.optional(v.number()),
+  embeddingsCompletedAt: v.optional(v.number()),
+  lastProcessedAt: v.optional(v.number()),
+  ocrMethod: v.optional(ocrMethodValidator),
+  ocrProvider: v.optional(v.literal("google_document_ai")),
+  ocrModelOrProcessor: v.optional(v.string()),
+  embeddingModel: v.optional(v.string()),
+  embeddedPageCount: v.optional(v.number()),
+  ocrGcsInputUri: v.optional(v.string()),
+  ocrFinalJsonGcsUri: v.optional(v.string()),
+  fileUrl: v.union(v.string(), v.null()),
+});
 
 type AuthenticatedCtx = QueryCtx | MutationCtx;
+type DocumentReplacement = Omit<Doc<"documents">, "_creationTime" | "_id">;
 
 async function requireCurrentUser(ctx: AuthenticatedCtx) {
   const identity = await ctx.auth.getUserIdentity();
@@ -23,108 +54,395 @@ function deriveDocumentTitle(filename: string) {
   return filename.replace(/\.pdf$/i, "").trim() || "Untitled PDF";
 }
 
-export const generateUploadUrl = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx) => {
-    await requireCurrentUser(ctx);
-    return await ctx.storage.generateUploadUrl();
-  },
-});
+function withoutSystemFields(document: Doc<"documents">): DocumentReplacement {
+  const rest = {
+    ...document,
+  } as DocumentReplacement & {
+    _creationTime?: number;
+    _id?: string;
+  };
 
-export const getStorageMetadata = internalQuery({
-  args: {
-    storageId: v.id("_storage"),
-  },
-  returns: v.union(
-    v.object({
-      _id: v.id("_storage"),
-      _creationTime: v.number(),
-      contentType: v.optional(v.string()),
-      sha256: v.string(),
-      size: v.number(),
-    }),
-    v.null(),
-  ),
-  handler: async (ctx, args) => {
-    const metadata = await ctx.db.system.get("_storage", args.storageId);
+  delete rest._creationTime;
+  delete rest._id;
+  return rest;
+}
 
-    if (!metadata) {
-      return null;
-    }
+function withoutProcessingArtifacts(
+  document: Doc<"documents">,
+): DocumentReplacement {
+  const rest = {
+    ...withoutSystemFields(document),
+  } as DocumentReplacement & { processingError?: string };
 
-    return {
-      _id: metadata._id,
-      _creationTime: metadata._creationTime,
-      contentType: metadata.contentType,
-      sha256: metadata.sha256,
-      size: metadata.size,
-    };
-  },
-});
+  delete rest.processingError;
+  return rest;
+}
 
-export const createDocumentRecord = internalMutation({
+function toDocumentListItem(document: Doc<"documents">) {
+  return {
+    _id: document._id,
+    _creationTime: document._creationTime,
+    title: document.title,
+    originalFilename: document.originalFilename,
+    status: document.status,
+    pageCount: document.pageCount,
+    processingError: document.processingError,
+    storageContentType: document.storageContentType,
+    storageSize: document.storageSize,
+    uploadCompletedAt: document.uploadCompletedAt,
+    processingStartedAt: document.processingStartedAt,
+    ocrCompletedAt: document.ocrCompletedAt,
+    embeddingsCompletedAt: document.embeddingsCompletedAt,
+    lastProcessedAt: document.lastProcessedAt,
+    ocrMethod: document.ocrMethod,
+    ocrProvider: document.ocrProvider,
+    ocrModelOrProcessor: document.ocrModelOrProcessor,
+    embeddingModel: document.embeddingModel,
+    embeddedPageCount: document.embeddedPageCount,
+    ocrGcsInputUri: document.ocrGcsInputUri,
+    ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri,
+    fileUrl: null,
+  };
+}
+
+export const reserveDirectUploadDocument = internalMutation({
   args: {
     filename: v.string(),
-    storageId: v.id("_storage"),
     ownerTokenIdentifier: v.string(),
-    pageCount: v.number(),
-    storageContentType: v.optional(v.string()),
-    storageSize: v.number(),
-    sha256: v.string(),
+    contentType: v.optional(v.string()),
   },
   returns: v.id("documents"),
   handler: async (ctx, args) => {
-    const existingDocument = await ctx.db
-      .query("documents")
-      .withIndex("by_storageId", (q) => q.eq("storageId", args.storageId))
-      .unique();
-
-    if (existingDocument) {
-      if (existingDocument.ownerTokenIdentifier !== args.ownerTokenIdentifier) {
-        throw new Error("This file is already linked to another user.");
-      }
-
-      return existingDocument._id;
-    }
-
     return await ctx.db.insert("documents", {
       ownerTokenIdentifier: args.ownerTokenIdentifier,
       title: deriveDocumentTitle(args.filename),
       originalFilename: args.filename,
-      storageId: args.storageId,
-      storageContentType: args.storageContentType,
+      storageSize: 0,
+      sha256: "",
+      status: "uploading",
+      uploadCompletedAt: Date.now(),
+      processingAttemptCount: 0,
+      ...(args.contentType !== undefined
+        ? { storageContentType: args.contentType }
+        : {}),
+    });
+  },
+});
+
+export const setReservedDocumentInputGcsUri = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    ocrGcsInputUri: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
+      document.status !== "uploading"
+    ) {
+      return false;
+    }
+
+    await ctx.db.patch(args.documentId, {
+      ocrGcsInputUri: args.ocrGcsInputUri,
+    });
+
+    return true;
+  },
+});
+
+export const completeDirectUploadRecord = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    contentType: v.optional(v.string()),
+    storageSize: v.number(),
+    sha256: v.string(),
+    pageCount: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
+      document.status !== "uploading"
+    ) {
+      return false;
+    }
+
+    await ctx.db.patch(args.documentId, {
+      ...(args.contentType !== undefined
+        ? { storageContentType: args.contentType }
+        : {}),
       storageSize: args.storageSize,
       sha256: args.sha256,
       pageCount: args.pageCount,
       status: "uploaded",
       uploadCompletedAt: Date.now(),
     });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.documentProcessing.runDocumentOcr,
+      {
+        documentId: args.documentId,
+        attemptNumber: 1,
+      },
+    );
+
+    return true;
+  },
+});
+
+export const deleteReservedDocument = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
+      document.status !== "uploading"
+    ) {
+      return null;
+    }
+
+    await ctx.db.delete(args.documentId);
+    return null;
+  },
+});
+
+export const beginProcessingAttempt = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    attemptNumber: v.number(),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      documentId: v.id("documents"),
+      ownerTokenIdentifier: v.string(),
+      originalFilename: v.string(),
+      pageCount: v.number(),
+      ocrGcsInputUri: v.union(v.string(), v.null()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.status === "ready" ||
+      (document.processingAttemptCount ?? 0) >= args.attemptNumber
+    ) {
+      return null;
+    }
+
+    await ctx.db.replace(args.documentId, {
+      ...withoutProcessingArtifacts(document),
+      status: "processing",
+      processingAttemptCount: args.attemptNumber,
+      processingStartedAt: Date.now(),
+    });
+
+    return {
+      documentId: document._id,
+      ownerTokenIdentifier: document.ownerTokenIdentifier,
+      originalFilename: document.originalFilename,
+      pageCount: document.pageCount ?? 0,
+      ocrGcsInputUri: document.ocrGcsInputUri ?? null,
+    };
+  },
+});
+
+export const clearDocumentPages = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    while (true) {
+      const pages = await ctx.db
+        .query("documentPages")
+        .withIndex("by_documentId_and_pageNumber", (q) =>
+          q.eq("documentId", args.documentId),
+        )
+        .take(128);
+
+      if (pages.length === 0) {
+        return null;
+      }
+
+      for (const page of pages) {
+        await ctx.db.delete(page._id);
+      }
+    }
+  },
+});
+
+export const insertDocumentPageBatch = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    pages: v.array(
+      v.object({
+        pageNumber: v.number(),
+        extractedText: v.string(),
+        embedding: v.array(v.float64()),
+        embeddingModel: v.string(),
+        embeddingTokenCount: v.optional(v.number()),
+      }),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
+
+    for (const page of args.pages) {
+      await ctx.db.insert("documentPages", {
+        ownerTokenIdentifier: args.ownerTokenIdentifier,
+        ownerDocumentKey,
+        documentId: args.documentId,
+        pageNumber: page.pageNumber,
+        extractedText: page.extractedText,
+        extractionMethod: "ocr",
+        embedding: page.embedding,
+        embeddingModel: page.embeddingModel,
+        ...(page.embeddingTokenCount !== undefined
+          ? { embeddingTokenCount: page.embeddingTokenCount }
+          : {}),
+      });
+    }
+
+    return null;
+  },
+});
+
+export const completeProcessingSuccess = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    attemptNumber: v.number(),
+    ocrMethod: ocrMethodValidator,
+    ocrModelOrProcessor: v.string(),
+    embeddingModel: v.string(),
+    embeddedPageCount: v.number(),
+    ocrGcsInputUri: v.optional(v.string()),
+    ocrGcsOutputPrefix: v.optional(v.string()),
+    ocrFinalJsonGcsUri: v.optional(v.string()),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      (document.processingAttemptCount ?? 0) !== args.attemptNumber
+    ) {
+      return false;
+    }
+
+    const now = Date.now();
+    await ctx.db.replace(args.documentId, {
+      ...withoutProcessingArtifacts(document),
+      status: "ready",
+      ocrCompletedAt: now,
+      embeddingsCompletedAt: now,
+      lastProcessedAt: now,
+      ocrMethod: args.ocrMethod,
+      ocrProvider: "google_document_ai",
+      ocrModelOrProcessor: args.ocrModelOrProcessor,
+      embeddingModel: args.embeddingModel,
+      embeddedPageCount: args.embeddedPageCount,
+      ...(args.ocrGcsInputUri !== undefined
+        ? { ocrGcsInputUri: args.ocrGcsInputUri }
+        : {}),
+      ...(args.ocrGcsOutputPrefix !== undefined
+        ? { ocrGcsOutputPrefix: args.ocrGcsOutputPrefix }
+        : {}),
+      ...(args.ocrFinalJsonGcsUri !== undefined
+        ? { ocrFinalJsonGcsUri: args.ocrFinalJsonGcsUri }
+        : {}),
+    });
+
+    return true;
+  },
+});
+
+export const completeProcessingFailure = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    attemptNumber: v.number(),
+    errorMessage: v.string(),
+    ocrMethod: v.optional(ocrMethodValidator),
+    ocrGcsInputUri: v.optional(v.string()),
+    ocrGcsOutputPrefix: v.optional(v.string()),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      (document.processingAttemptCount ?? 0) !== args.attemptNumber
+    ) {
+      return false;
+    }
+
+    await ctx.db.patch(args.documentId, {
+      status: "failed",
+      processingError: args.errorMessage,
+      lastProcessedAt: Date.now(),
+      ...(args.ocrMethod !== undefined ? { ocrMethod: args.ocrMethod } : {}),
+      ...(args.ocrGcsInputUri !== undefined
+        ? { ocrGcsInputUri: args.ocrGcsInputUri }
+        : {}),
+      ...(args.ocrGcsOutputPrefix !== undefined
+        ? { ocrGcsOutputPrefix: args.ocrGcsOutputPrefix }
+        : {}),
+    });
+
+    return true;
+  },
+});
+
+export const markRetryPending = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    attemptNumber: v.number(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      (document.processingAttemptCount ?? 0) !== args.attemptNumber
+    ) {
+      return false;
+    }
+
+    await ctx.db.replace(args.documentId, {
+      ...withoutProcessingArtifacts(document),
+      status: "processing",
+    });
+
+    return true;
   },
 });
 
 export const listDocuments = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("documents"),
-      _creationTime: v.number(),
-      title: v.string(),
-      originalFilename: v.string(),
-      status: v.union(
-        v.literal("uploaded"),
-        v.literal("processing"),
-        v.literal("ready"),
-        v.literal("failed"),
-      ),
-      pageCount: v.optional(v.number()),
-      processingError: v.optional(v.string()),
-      storageContentType: v.optional(v.string()),
-      storageSize: v.number(),
-      uploadCompletedAt: v.number(),
-      fileUrl: v.union(v.string(), v.null()),
-    }),
-  ),
+  returns: v.array(documentListItemValidator),
   handler: async (ctx) => {
     const identity = await requireCurrentUser(ctx);
     const documents = await ctx.db
@@ -135,20 +453,49 @@ export const listDocuments = query({
       .order("desc")
       .take(50);
 
-    return await Promise.all(
-      documents.map(async (document) => ({
-        _id: document._id,
-        _creationTime: document._creationTime,
-        title: document.title,
-        originalFilename: document.originalFilename,
-        status: document.status,
-        pageCount: document.pageCount,
-        processingError: document.processingError,
-        storageContentType: document.storageContentType,
-        storageSize: document.storageSize,
-        uploadCompletedAt: document.uploadCompletedAt,
-        fileUrl: await ctx.storage.getUrl(document.storageId),
-      })),
-    );
+    return documents.map(toDocumentListItem);
+  },
+});
+
+export const getOwnedDocument = internalQuery({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id("documents"),
+      ownerTokenIdentifier: v.string(),
+      status: documentStatusValidator,
+      title: v.string(),
+      originalFilename: v.string(),
+      ocrGcsInputUri: v.optional(v.string()),
+      ocrFinalJsonGcsUri: v.optional(v.string()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+    ) {
+      return null;
+    }
+
+    return {
+      _id: document._id,
+      ownerTokenIdentifier: document.ownerTokenIdentifier,
+      status: document.status,
+      title: document.title,
+      originalFilename: document.originalFilename,
+      ...(document.ocrGcsInputUri !== undefined
+        ? { ocrGcsInputUri: document.ocrGcsInputUri }
+        : {}),
+      ...(document.ocrFinalJsonGcsUri !== undefined
+        ? { ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri }
+        : {}),
+    };
   },
 });

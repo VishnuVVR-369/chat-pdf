@@ -2,32 +2,21 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 const documentStatus = v.union(
+  v.literal("uploading"),
   v.literal("uploaded"),
   v.literal("processing"),
   v.literal("ready"),
   v.literal("failed"),
 );
 
-const extractionMethod = v.union(v.literal("text"), v.literal("ocr"));
-
-const messageRole = v.union(
-  v.literal("system"),
-  v.literal("user"),
-  v.literal("assistant"),
-);
-
-const answerStatus = v.union(
-  v.literal("grounded"),
-  v.literal("weak_evidence"),
-  v.literal("not_found"),
-);
+const extractionMethod = v.literal("ocr");
+const ocrMethod = v.literal("document_ai_batch");
 
 export default defineSchema({
   documents: defineTable({
     ownerTokenIdentifier: v.string(),
     title: v.string(),
     originalFilename: v.string(),
-    storageId: v.id("_storage"),
     storageContentType: v.optional(v.string()),
     storageSize: v.number(),
     sha256: v.string(),
@@ -35,7 +24,19 @@ export default defineSchema({
     pageCount: v.optional(v.number()),
     processingError: v.optional(v.string()),
     uploadCompletedAt: v.number(),
+    processingStartedAt: v.optional(v.number()),
+    ocrCompletedAt: v.optional(v.number()),
+    embeddingsCompletedAt: v.optional(v.number()),
     lastProcessedAt: v.optional(v.number()),
+    processingAttemptCount: v.optional(v.number()),
+    ocrMethod: v.optional(ocrMethod),
+    ocrProvider: v.optional(v.literal("google_document_ai")),
+    ocrModelOrProcessor: v.optional(v.string()),
+    embeddingModel: v.optional(v.string()),
+    embeddedPageCount: v.optional(v.number()),
+    ocrGcsInputUri: v.optional(v.string()),
+    ocrGcsOutputPrefix: v.optional(v.string()),
+    ocrFinalJsonGcsUri: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"])
     .index("by_ownerTokenIdentifier_and_status", [
@@ -45,77 +46,49 @@ export default defineSchema({
     .index("by_ownerTokenIdentifier_and_originalFilename", [
       "ownerTokenIdentifier",
       "originalFilename",
-    ])
-    .index("by_storageId", ["storageId"]),
+    ]),
   documentPages: defineTable({
     ownerTokenIdentifier: v.string(),
+    ownerDocumentKey: v.string(),
     documentId: v.id("documents"),
     pageNumber: v.number(),
     extractedText: v.string(),
     extractionMethod,
+    embedding: v.optional(v.array(v.float64())),
+    embeddingModel: v.optional(v.string()),
+    embeddingTokenCount: v.optional(v.number()),
   })
     .index("by_ownerTokenIdentifier_and_documentId", [
       "ownerTokenIdentifier",
       "documentId",
     ])
-    .index("by_documentId_and_pageNumber", ["documentId", "pageNumber"]),
-  documentChunks: defineTable({
+    .index("by_documentId_and_pageNumber", ["documentId", "pageNumber"])
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1536,
+      filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
+    }),
+  conversations: defineTable({
     ownerTokenIdentifier: v.string(),
     documentId: v.id("documents"),
-    startPageNumber: v.number(),
-    endPageNumber: v.number(),
-    text: v.string(),
-    tokenCount: v.optional(v.number()),
-    embedding: v.optional(v.array(v.number())),
-  })
-    .index("by_ownerTokenIdentifier_and_documentId", [
-      "ownerTokenIdentifier",
-      "documentId",
-    ])
-    .index("by_documentId_and_startPageNumber", [
-      "documentId",
-      "startPageNumber",
-    ]),
-  chatSessions: defineTable({
-    ownerTokenIdentifier: v.string(),
-    title: v.optional(v.string()),
-    lastMessageAt: v.optional(v.number()),
-  }).index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"]),
-  chatSessionDocuments: defineTable({
-    ownerTokenIdentifier: v.string(),
-    chatSessionId: v.id("chatSessions"),
-    documentId: v.id("documents"),
-  })
-    .index("by_ownerTokenIdentifier_and_chatSessionId", [
-      "ownerTokenIdentifier",
-      "chatSessionId",
-    ])
-    .index("by_chatSessionId_and_documentId", ["chatSessionId", "documentId"]),
+    title: v.string(),
+    createdAt: v.number(),
+  }).index("by_ownerTokenIdentifier_and_documentId", [
+    "ownerTokenIdentifier",
+    "documentId",
+  ]),
   messages: defineTable({
-    ownerTokenIdentifier: v.string(),
-    chatSessionId: v.id("chatSessions"),
-    role: messageRole,
+    conversationId: v.id("conversations"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
-    answerStatus: v.optional(answerStatus),
-    model: v.optional(v.string()),
-  })
-    .index("by_ownerTokenIdentifier_and_chatSessionId", [
-      "ownerTokenIdentifier",
-      "chatSessionId",
-    ])
-    .index("by_chatSessionId", ["chatSessionId"]),
-  citations: defineTable({
-    ownerTokenIdentifier: v.string(),
-    messageId: v.id("messages"),
-    documentId: v.id("documents"),
-    chunkId: v.optional(v.id("documentChunks")),
-    pageNumber: v.number(),
-    snippet: v.string(),
-    highlightedText: v.optional(v.string()),
-  })
-    .index("by_ownerTokenIdentifier_and_messageId", [
-      "ownerTokenIdentifier",
-      "messageId",
-    ])
-    .index("by_messageId", ["messageId"]),
+    citations: v.optional(
+      v.array(
+        v.object({
+          pageNumber: v.number(),
+          snippet: v.string(),
+        }),
+      ),
+    ),
+    createdAt: v.number(),
+  }).index("by_conversationId", ["conversationId"]),
 });

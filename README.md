@@ -35,10 +35,9 @@ ChatPDF is a customer-facing web application for uploading PDFs and chatting wit
 
 ### AI and Processing
 
-- OpenAI for answer generation
-- Gemini for embeddings
+- OpenAI for answer generation and embeddings
+- Google Document AI for OCR
 - `pdfjs-dist` for PDF parsing
-- `tesseract.js` for OCR
 
 ### Analytics
 
@@ -88,8 +87,15 @@ Copy `.env.example` to `.env.local` and provide values for:
 - `GOOGLE_CLIENT_SECRET`
 - `GITHUB_CLIENT_ID`
 - `GITHUB_CLIENT_SECRET`
+- `GOOGLE_DOCUMENTAI_SERVICE_ACCOUNT_JSON`
+- `GOOGLE_DOCUMENTAI_PROJECT_ID`
+- `GOOGLE_DOCUMENTAI_LOCATION`
+- `GOOGLE_DOCUMENTAI_PROCESSOR_ID`
+- `GOOGLE_DOCUMENTAI_GCS_BUCKET`
+- `GOOGLE_DOCUMENTAI_GCS_INPUT_PREFIX`
+- `GOOGLE_DOCUMENTAI_GCS_OUTPUT_PREFIX`
 - `OPENAI_API_KEY`
-- `GEMINI_API_KEY`
+- `OPENAI_EMBEDDING_MODEL`
 - `NEXT_PUBLIC_POSTHOG_KEY`
 - `NEXT_PUBLIC_POSTHOG_HOST`
 

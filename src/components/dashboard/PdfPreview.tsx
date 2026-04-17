@@ -14,6 +14,8 @@ type PdfPreviewProps = {
   url?: string | null;
 };
 
+const PREVIEW_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000];
+
 let workerConfigured = false;
 
 function ensurePdfWorkerConfigured() {
@@ -26,6 +28,31 @@ function ensurePdfWorkerConfigured() {
     import.meta.url,
   ).toString();
   workerConfigured = true;
+}
+
+function getPdfLoadErrorMessage(error: unknown) {
+  return error instanceof Error
+    ? error.message
+    : "Could not render this PDF page.";
+}
+
+function shouldRetryPdfLoad(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const candidate = error as Error & {
+    status?: number;
+  };
+
+  return (
+    candidate.status === 404 ||
+    candidate.message.includes("Unexpected server response (404)")
+  );
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function PdfPreview({
@@ -64,35 +91,51 @@ export function PdfPreview({
       setIsLoadingDocument(true);
       setError(null);
 
+      const source = file
+        ? { data: new Uint8Array(await file.arrayBuffer()) }
+        : { url: url ?? undefined };
+
       try {
-        const source = file
-          ? { data: new Uint8Array(await file.arrayBuffer()) }
-          : { url: url ?? undefined };
+        let attempt = 0;
 
-        loadingTask = getDocument({
-          ...source,
-          isEvalSupported: false,
-          stopAtErrors: true,
-          useWorkerFetch: false,
-        });
+        while (!cancelled) {
+          try {
+            loadingTask = getDocument({
+              ...source,
+              isEvalSupported: false,
+              stopAtErrors: true,
+              useWorkerFetch: false,
+            });
 
-        const nextDocument = await loadingTask.promise;
+            const nextDocument = await loadingTask.promise;
 
-        if (cancelled) {
-          await nextDocument.destroy();
-          return;
+            if (cancelled) {
+              await nextDocument.destroy();
+              return;
+            }
+
+            pageCountChangeRef.current?.(nextDocument.numPages);
+            setPdfDocument(nextDocument);
+            return;
+          } catch (renderError) {
+            const canRetry =
+              !file &&
+              attempt < PREVIEW_RETRY_DELAYS_MS.length &&
+              shouldRetryPdfLoad(renderError);
+
+            if (!canRetry) {
+              throw renderError;
+            }
+
+            const retryDelay = PREVIEW_RETRY_DELAYS_MS[attempt];
+            attempt += 1;
+            await wait(retryDelay);
+          }
         }
-
-        pageCountChangeRef.current?.(nextDocument.numPages);
-        setPdfDocument(nextDocument);
       } catch (renderError) {
         if (!cancelled) {
           setPdfDocument(null);
-          setError(
-            renderError instanceof Error
-              ? renderError.message
-              : "Could not render this PDF page.",
-          );
+          setError(getPdfLoadErrorMessage(renderError));
         }
       } finally {
         if (!cancelled) {
@@ -164,11 +207,7 @@ export function PdfPreview({
         await renderTask.promise;
       } catch (renderError) {
         if (!cancelled) {
-          setError(
-            renderError instanceof Error
-              ? renderError.message
-              : "Could not render this PDF page.",
-          );
+          setError(getPdfLoadErrorMessage(renderError));
         }
       } finally {
         if (!cancelled) {

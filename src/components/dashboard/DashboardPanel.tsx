@@ -2,13 +2,7 @@
 
 import type { ChangeEvent } from "react";
 import { useEffect, useState } from "react";
-import {
-  useAction,
-  useConvex,
-  useConvexAuth,
-  useMutation,
-  useQuery,
-} from "convex/react";
+import { useAction, useConvex, useConvexAuth, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
@@ -51,8 +45,12 @@ export function DashboardPanel({
     api.documents.listDocuments,
     isAuthenticated ? {} : "skip",
   );
-  const generateUploadUrl = useMutation(api.documents.generateUploadUrl);
-  const createDocument = useAction(api.documentUploads.createDocument);
+  const createDirectUploadTarget = useAction(
+    api.documentUploads.createDirectUploadTarget,
+  );
+  const completeDirectUpload = useAction(
+    api.documentUploads.completeDirectUpload,
+  );
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [isCheckingPdf, setIsCheckingPdf] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -62,9 +60,7 @@ export function DashboardPanel({
     null,
   );
   const [lastUploadUrl, setLastUploadUrl] = useState<string | null>(null);
-  const [lastStorageId, setLastStorageId] = useState<Id<"_storage"> | null>(
-    null,
-  );
+  const [lastStorageId, setLastStorageId] = useState<string | null>(null);
   const [lastCreatedDocumentId, setLastCreatedDocumentId] =
     useState<Id<"documents"> | null>(null);
   const [lastListRunAt, setLastListRunAt] = useState<number | null>(null);
@@ -74,11 +70,20 @@ export function DashboardPanel({
 
   const documentCount = documents?.length ?? 0;
   const uploadedCount =
-    documents?.filter((document) => document.status === "uploaded").length ?? 0;
+    documents?.filter(
+      (document: NonNullable<typeof documents>[number]) =>
+        document.status === "uploading" || document.status === "uploaded",
+    ).length ?? 0;
   const readyCount =
-    documents?.filter((document) => document.status === "ready").length ?? 0;
+    documents?.filter(
+      (document: NonNullable<typeof documents>[number]) =>
+        document.status === "ready",
+    ).length ?? 0;
   const selectedDocument =
-    documents?.find((document) => document._id === selectedDocumentId) ?? null;
+    documents?.find(
+      (document: NonNullable<typeof documents>[number]) =>
+        document._id === selectedDocumentId,
+    ) ?? null;
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -224,16 +229,19 @@ export function DashboardPanel({
     setIsUploading(true);
 
     try {
-      const uploadUrl = await generateUploadUrl({});
-      setLastUploadUrl(uploadUrl);
+      const uploadTarget = await createDirectUploadTarget({
+        filename: pendingUpload.file.name,
+        contentType: pendingUpload.file.type || "application/pdf",
+      });
+      setLastUploadUrl(uploadTarget.uploadUrl);
       pushApiEvent(
-        "generateUploadUrl",
-        "Signed upload URL created.",
+        "createDirectUploadTarget",
+        "Signed GCS upload URL created.",
         "success",
       );
 
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
+      const uploadResponse = await fetch(uploadTarget.uploadUrl, {
+        method: uploadTarget.method,
         headers: {
           "Content-Type": pendingUpload.file.type || "application/pdf",
         },
@@ -241,24 +249,18 @@ export function DashboardPanel({
       });
 
       if (!uploadResponse.ok) {
-        throw new Error("Convex storage rejected the PDF upload.");
+        throw new Error("GCS rejected the PDF upload.");
       }
 
-      const body = (await uploadResponse.json()) as {
-        storageId?: string;
-      };
+      setLastStorageId(uploadTarget.gcsUri);
+      pushApiEvent(
+        "gcsUpload",
+        `Stored PDF as ${uploadTarget.gcsUri}.`,
+        "success",
+      );
 
-      if (!body.storageId) {
-        throw new Error("Convex storage did not return a storage id.");
-      }
-
-      const storageId = body.storageId as Id<"_storage">;
-      setLastStorageId(storageId);
-      pushApiEvent("storageUpload", `Stored PDF as ${storageId}.`, "success");
-
-      const documentId = await createDocument({
-        filename: pendingUpload.file.name,
-        storageId,
+      const documentId = await completeDirectUpload({
+        documentId: uploadTarget.documentId,
       });
 
       setLastCreatedDocumentId(documentId);
@@ -303,9 +305,10 @@ export function DashboardPanel({
               </h1>
               <p className="max-w-3xl text-sm text-slate-600">
                 This dashboard is now a live test harness for the current Convex
-                document APIs. You can generate upload URLs, upload a PDF into
-                Convex storage, create the document record, re-run
-                `listDocuments`, and inspect the returned data in one place.
+                document APIs. You can generate signed GCS upload URLs, upload a
+                PDF directly into the bucket, finalize the document record,
+                re-run `listDocuments`, and inspect the returned data in one
+                place.
               </p>
             </div>
           </div>
@@ -425,7 +428,7 @@ export function DashboardPanel({
               }
             />
             <ApiResultCard
-              label="Last storage id"
+              label="Last GCS URI"
               value={lastStorageId ?? "No file stored yet"}
             />
             <ApiResultCard
@@ -494,84 +497,88 @@ export function DashboardPanel({
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {documents.map((document) => (
-                    <article
-                      key={document._id}
-                      className={`rounded-[1.6rem] border p-5 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.2)] transition ${
-                        selectedDocumentId === document._id
-                          ? "border-cyan-300 bg-cyan-50/80"
-                          : "border-slate-200/80 bg-slate-50/85"
-                      }`}
-                    >
-                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <h3 className="text-lg font-semibold tracking-tight text-slate-950">
-                              {document.title}
-                            </h3>
-                            <StatusBadge status={document.status} />
+                  {documents.map(
+                    (document: NonNullable<typeof documents>[number]) => (
+                      <article
+                        key={document._id}
+                        className={`rounded-[1.6rem] border p-5 shadow-[0_18px_50px_-32px_rgba(15,23,42,0.2)] transition ${
+                          selectedDocumentId === document._id
+                            ? "border-cyan-300 bg-cyan-50/80"
+                            : "border-slate-200/80 bg-slate-50/85"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <h3 className="text-lg font-semibold tracking-tight text-slate-950">
+                                {document.title}
+                              </h3>
+                              <StatusBadge status={document.status} />
+                            </div>
+                            <p className="text-sm break-words text-slate-600">
+                              {document.originalFilename}
+                            </p>
                           </div>
-                          <p className="text-sm break-words text-slate-600">
-                            {document.originalFilename}
-                          </p>
-                        </div>
 
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            className="rounded-full px-4"
-                            onClick={() => setSelectedDocumentId(document._id)}
-                            variant="outline"
-                          >
-                            Inspect
-                          </Button>
-                          {document.fileUrl ? (
+                          <div className="flex flex-wrap gap-2">
                             <Button
-                              asChild
                               className="rounded-full px-4"
+                              onClick={() =>
+                                setSelectedDocumentId(document._id)
+                              }
                               variant="outline"
                             >
-                              <a
-                                href={document.fileUrl}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                Open PDF
-                              </a>
+                              Inspect
                             </Button>
-                          ) : null}
+                            {document.fileUrl ? (
+                              <Button
+                                asChild
+                                className="rounded-full px-4"
+                                variant="outline"
+                              >
+                                <a
+                                  href={document.fileUrl}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  Open PDF
+                                </a>
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-4">
-                        <DocumentMeta
-                          label="Uploaded"
-                          value={formatTimestamp(document.uploadCompletedAt)}
-                        />
-                        <DocumentMeta
-                          label="File size"
-                          value={formatFileSize(document.storageSize)}
-                        />
-                        <DocumentMeta
-                          label="Page count"
-                          value={
-                            document.pageCount !== undefined
-                              ? String(document.pageCount)
-                              : "Unavailable"
-                          }
-                        />
-                        <DocumentMeta
-                          label="Document id"
-                          value={document._id}
-                        />
-                      </div>
+                        <div className="mt-4 grid gap-3 text-sm text-slate-600 md:grid-cols-4">
+                          <DocumentMeta
+                            label="Uploaded"
+                            value={formatTimestamp(document.uploadCompletedAt)}
+                          />
+                          <DocumentMeta
+                            label="File size"
+                            value={formatFileSize(document.storageSize)}
+                          />
+                          <DocumentMeta
+                            label="Page count"
+                            value={
+                              document.pageCount !== undefined
+                                ? String(document.pageCount)
+                                : "Unavailable"
+                            }
+                          />
+                          <DocumentMeta
+                            label="Document id"
+                            value={document._id}
+                          />
+                        </div>
 
-                      {document.processingError ? (
-                        <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                          {document.processingError}
-                        </p>
-                      ) : null}
-                    </article>
-                  ))}
+                        {document.processingError ? (
+                          <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                            {document.processingError}
+                          </p>
+                        ) : null}
+                      </article>
+                    ),
+                  )}
                 </div>
               )}
             </div>
@@ -748,14 +755,18 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 function StatusBadge({
   status,
 }: {
-  status: "uploaded" | "processing" | "ready" | "failed";
+  status: "uploading" | "uploaded" | "processing" | "ready" | "failed";
 }) {
   const styles = {
+    uploading: "border-sky-200 bg-sky-50 text-sky-700",
     uploaded: "border-cyan-200 bg-cyan-50 text-cyan-700",
     processing: "border-amber-200 bg-amber-50 text-amber-700",
     ready: "border-emerald-200 bg-emerald-50 text-emerald-700",
     failed: "border-red-200 bg-red-50 text-red-700",
-  } satisfies Record<"uploaded" | "processing" | "ready" | "failed", string>;
+  } satisfies Record<
+    "uploading" | "uploaded" | "processing" | "ready" | "failed",
+    string
+  >;
 
   return (
     <span

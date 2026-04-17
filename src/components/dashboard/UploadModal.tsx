@@ -13,14 +13,14 @@ type UploadModalProps = {
   initialFile?: File | null;
   onClose: () => void;
   onUpload: (file: File) => Promise<Id<"documents">>;
-  onSuccess: (documentId: Id<"documents">) => void;
+  onSuccess: (documentId: Id<"documents">, file: File) => void;
 };
 
 type ModalPhase =
   | { type: "idle" }
   | { type: "checking"; file: File }
   | { type: "uploading"; file: File; pageCount: number | null }
-  | { type: "success"; documentId: Id<"documents"> }
+  | { type: "success"; documentId: Id<"documents">; file: File }
   | { type: "error"; message: string };
 
 export function UploadModal({
@@ -59,7 +59,7 @@ export function UploadModal({
   useEffect(() => {
     if (phase.type === "success") {
       const t = setTimeout(() => {
-        onSuccess(phase.documentId);
+        onSuccess(phase.documentId, phase.file);
         onClose();
       }, 1400);
       return () => clearTimeout(t);
@@ -101,7 +101,7 @@ export function UploadModal({
         setPhase({ type: "uploading", file, pageCount });
 
         const documentId = await onUpload(file);
-        setPhase({ type: "success", documentId });
+        setPhase({ type: "success", documentId, file });
       } catch (error) {
         setPhase({
           type: "error",

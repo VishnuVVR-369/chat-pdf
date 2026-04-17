@@ -9,9 +9,14 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as chat from "../chat.js";
+import type * as chatData from "../chatData.js";
+import type * as documentProcessing from "../documentProcessing.js";
 import type * as documentUploads from "../documentUploads.js";
 import type * as documents from "../documents.js";
+import type * as googleCloud from "../googleCloud.js";
 import type * as http from "../http.js";
+import type * as openAi from "../openAi.js";
 
 import type {
   ApiFromModules,
@@ -21,9 +26,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  chat: typeof chat;
+  chatData: typeof chatData;
+  documentProcessing: typeof documentProcessing;
   documentUploads: typeof documentUploads;
   documents: typeof documents;
+  googleCloud: typeof googleCloud;
   http: typeof http;
+  openAi: typeof openAi;
 }>;
 
 /**

@@ -9,7 +9,9 @@ import type { WorkspaceDocument } from "./Sidebar";
 type PdfViewerProps = {
   document: WorkspaceDocument;
   localFile?: File | null;
+  onPageChange?: (page: number) => void;
   onPageCountChange?: (count: number) => void;
+  resolvedFileUrl?: string | null;
 };
 
 function formatFileSize(bytes: number) {
@@ -21,7 +23,9 @@ function formatFileSize(bytes: number) {
 export function PdfViewer({
   document,
   localFile,
+  onPageChange,
   onPageCountChange,
+  resolvedFileUrl,
 }: PdfViewerProps) {
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState<number | null>(
@@ -31,6 +35,11 @@ export function PdfViewer({
   const handlePageCountChange = (count: number) => {
     setPageCount(count);
     onPageCountChange?.(count);
+  };
+
+  const handleSetPage = (page: number) => {
+    setPageNumber(page);
+    onPageChange?.(page);
   };
 
   return (
@@ -54,7 +63,7 @@ export function PdfViewer({
           <Button
             className="h-7 w-7 rounded-lg border-stone-700/60 p-0"
             disabled={pageNumber <= 1}
-            onClick={() => setPageNumber((p) => Math.max(1, p - 1))}
+            onClick={() => handleSetPage(Math.max(1, pageNumber - 1))}
             size="icon-xs"
             variant="outline"
           >
@@ -67,7 +76,9 @@ export function PdfViewer({
             className="h-7 w-7 rounded-lg border-stone-700/60 p-0"
             disabled={pageCount === null || pageNumber >= pageCount}
             onClick={() =>
-              setPageNumber((p) => (pageCount ? Math.min(pageCount, p + 1) : p))
+              handleSetPage(
+                pageCount ? Math.min(pageCount, pageNumber + 1) : pageNumber,
+              )
             }
             size="icon-xs"
             variant="outline"
@@ -79,12 +90,17 @@ export function PdfViewer({
 
       {/* Canvas */}
       <div className="flex-1 overflow-hidden bg-stone-950/50">
+        {document.status === "failed" && document.processingError && (
+          <div className="border-b border-red-950/60 bg-red-950/20 px-4 py-3 text-sm text-red-200">
+            {document.processingError}
+          </div>
+        )}
         <div className="h-full">
           <PdfPreview
             file={localFile}
             onPageCountChange={handlePageCountChange}
             pageNumber={pageNumber}
-            url={document.fileUrl}
+            url={resolvedFileUrl ?? document.fileUrl}
           />
         </div>
       </div>
@@ -98,6 +114,7 @@ function StatusBadge({ status }: { status: string }) {
       className={cn(
         "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase",
         status === "ready" && "bg-emerald-500/10 text-emerald-400",
+        status === "uploading" && "bg-sky-500/10 text-sky-400",
         status === "uploaded" && "bg-cyan-500/10 text-cyan-400",
         status === "processing" && "bg-amber-500/10 text-amber-400",
         status === "failed" && "bg-red-500/10 text-red-400",

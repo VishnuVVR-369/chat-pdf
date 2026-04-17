@@ -1,20 +1,16 @@
 "use node";
 
+import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
+import { createGoogleClients } from "./googleCloud";
 import { MAX_PDF_PAGES } from "../src/constants/pdf";
 
-type StorageMetadata = {
-  _id: Id<"_storage">;
-  _creationTime: number;
-  contentType?: string;
-  sha256: string;
-  size: number;
-};
+const DIRECT_UPLOAD_EXPIRY_MS = 30 * 60 * 1000;
 
 function isPasswordProtectedPdfError(error: unknown) {
   return (
@@ -34,101 +30,298 @@ async function requireCurrentUser(ctx: ActionCtx) {
   return identity;
 }
 
-async function loadStorageMetadata(
-  ctx: ActionCtx,
-  storageId: Id<"_storage">,
-): Promise<StorageMetadata> {
-  const metadata = await ctx.runQuery(internal.documents.getStorageMetadata, {
-    storageId,
-  });
-
-  if (metadata === null) {
-    throw new Error("Uploaded file could not be found in Convex storage.");
-  }
-
-  return metadata as StorageMetadata;
-}
-
 async function readPdfPageCount(bytes: Uint8Array) {
   const document = await PDFDocument.load(bytes, {
     ignoreEncryption: false,
     throwOnInvalidObject: true,
     updateMetadata: false,
   });
+
   return document.getPageCount();
 }
 
-async function validateStoredPdf(
-  ctx: ActionCtx,
-  storageId: Id<"_storage">,
-): Promise<StorageMetadata & { pageCount: number }> {
-  const metadata = await loadStorageMetadata(ctx, storageId);
-
-  if (metadata.size <= 0) {
-    await ctx.storage.delete(storageId);
-    throw new Error("Uploaded PDF is empty.");
-  }
-
-  const blob = await ctx.storage.get(storageId);
-
-  if (!blob) {
-    throw new Error("Uploaded file could not be read from Convex storage.");
-  }
-
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  const signature = new TextDecoder("utf-8").decode(bytes.subarray(0, 5));
-
-  if (signature !== "%PDF-") {
-    await ctx.storage.delete(storageId);
-    throw new Error("Only valid PDF files can be uploaded.");
-  }
-
-  try {
-    const pageCount = await readPdfPageCount(bytes);
-
-    if (pageCount > MAX_PDF_PAGES) {
-      throw new Error(
-        `PDFs must be ${MAX_PDF_PAGES} pages or fewer. This PDF has ${pageCount} pages.`,
-      );
-    }
-
-    return {
-      ...metadata,
-      pageCount,
-    };
-  } catch (error) {
-    await ctx.storage.delete(storageId);
-
-    if (isPasswordProtectedPdfError(error)) {
-      throw new Error("This PDF is password-protected or encrypted.");
-    }
-
-    if (error instanceof Error && error.message.includes("pages or fewer")) {
-      throw error;
-    }
-
-    throw new Error("Could not read the PDF page count.");
-  }
+async function discardReservedUpload(
+  ctx: Pick<ActionCtx, "runMutation">,
+  file: { delete(options: { ignoreNotFound: boolean }): Promise<unknown> },
+  documentId: Id<"documents">,
+  ownerTokenIdentifier: string,
+) {
+  await file.delete({ ignoreNotFound: true });
+  await ctx.runMutation(internal.documents.deleteReservedDocument, {
+    documentId,
+    ownerTokenIdentifier,
+  });
 }
 
-export const createDocument = action({
+function buildObjectName(
+  prefix: string,
+  documentId: Id<"documents">,
+  filename: string,
+) {
+  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]+/g, "_");
+  return `${prefix}/${documentId}/${safeFilename}`;
+}
+
+function parseGcsUri(uri: string) {
+  const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(uri);
+
+  if (!match) {
+    throw new Error("Invalid GCS URI.");
+  }
+
+  return {
+    bucketName: match[1],
+    objectName: match[2],
+  };
+}
+
+export const createDirectUploadTarget = action({
   args: {
     filename: v.string(),
-    storageId: v.id("_storage"),
+    contentType: v.optional(v.string()),
+  },
+  returns: v.object({
+    documentId: v.id("documents"),
+    uploadUrl: v.string(),
+    gcsUri: v.string(),
+    method: v.literal("PUT"),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    documentId: Id<"documents">;
+    uploadUrl: string;
+    gcsUri: string;
+    method: "PUT";
+  }> => {
+    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
+      .tokenIdentifier;
+    const clients = createGoogleClients();
+    const documentId: Id<"documents"> = await ctx.runMutation(
+      internal.documents.reserveDirectUploadDocument,
+      {
+        filename: args.filename,
+        ownerTokenIdentifier,
+        ...(args.contentType !== undefined
+          ? { contentType: args.contentType }
+          : {}),
+      },
+    );
+
+    try {
+      const objectName = buildObjectName(
+        clients.inputPrefix,
+        documentId,
+        args.filename,
+      );
+      const gcsUri = `gs://${clients.bucketName}/${objectName}`;
+      const updatedDocument = await ctx.runMutation(
+        internal.documents.setReservedDocumentInputGcsUri,
+        {
+          documentId,
+          ownerTokenIdentifier,
+          ocrGcsInputUri: gcsUri,
+        },
+      );
+
+      if (!updatedDocument) {
+        throw new Error("Could not reserve the direct upload target.");
+      }
+
+      const [uploadUrl] = await clients.storageClient
+        .bucket(clients.bucketName)
+        .file(objectName)
+        .getSignedUrl({
+          version: "v4",
+          action: "write",
+          expires: Date.now() + 15 * 60 * 1000,
+          contentType: args.contentType ?? "application/pdf",
+        });
+
+      await ctx.scheduler.runAfter(
+        DIRECT_UPLOAD_EXPIRY_MS,
+        internal.documentUploads.expireDirectUploadReservation,
+        {
+          documentId,
+          ownerTokenIdentifier,
+          gcsUri,
+        },
+      );
+
+      return {
+        documentId,
+        uploadUrl,
+        gcsUri,
+        method: "PUT",
+      };
+    } catch (error) {
+      await ctx.runMutation(internal.documents.deleteReservedDocument, {
+        documentId,
+        ownerTokenIdentifier,
+      });
+
+      throw error;
+    }
+  },
+});
+
+export const expireDirectUploadReservation = internalAction({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    gcsUri: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier: args.ownerTokenIdentifier,
+    });
+
+    if (
+      !document ||
+      document.status !== "uploading" ||
+      document.ocrGcsInputUri !== args.gcsUri
+    ) {
+      return null;
+    }
+
+    const { storageClient } = createGoogleClients();
+    const { bucketName, objectName } = parseGcsUri(args.gcsUri);
+    await storageClient
+      .bucket(bucketName)
+      .file(objectName)
+      .delete({ ignoreNotFound: true });
+
+    await ctx.runMutation(internal.documents.deleteReservedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier: args.ownerTokenIdentifier,
+    });
+
+    return null;
+  },
+});
+
+export const completeDirectUpload = action({
+  args: {
+    documentId: v.id("documents"),
   },
   returns: v.id("documents"),
   handler: async (ctx, args): Promise<Id<"documents">> => {
-    const identity = await requireCurrentUser(ctx);
-    const metadata = await validateStoredPdf(ctx, args.storageId);
-
-    return await ctx.runMutation(internal.documents.createDocumentRecord, {
-      filename: args.filename,
-      storageId: args.storageId,
-      ownerTokenIdentifier: identity.tokenIdentifier,
-      pageCount: metadata.pageCount,
-      storageContentType: metadata.contentType,
-      storageSize: metadata.size,
-      sha256: metadata.sha256,
+    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
+      .tokenIdentifier;
+    const clients = createGoogleClients();
+    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier,
     });
+
+    if (!document?.ocrGcsInputUri) {
+      throw new Error("Uploaded PDF could not be found in GCS.");
+    }
+
+    const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
+    const file = clients.storageClient.bucket(bucketName).file(objectName);
+    const [metadata] = await file.getMetadata();
+    const [contents] = await file.download();
+
+    if (!contents || contents.length === 0) {
+      await discardReservedUpload(
+        ctx,
+        file,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+      throw new Error("Uploaded PDF is empty.");
+    }
+
+    const signature = contents.subarray(0, 5).toString("utf-8");
+
+    if (signature !== "%PDF-") {
+      await discardReservedUpload(
+        ctx,
+        file,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+      throw new Error("Only valid PDF files can be uploaded.");
+    }
+
+    try {
+      const pageCount = await readPdfPageCount(contents);
+
+      if (pageCount > MAX_PDF_PAGES) {
+        throw new Error(
+          `PDFs must be ${MAX_PDF_PAGES} pages or fewer. This PDF has ${pageCount} pages.`,
+        );
+      }
+
+      const completed = await ctx.runMutation(
+        internal.documents.completeDirectUploadRecord,
+        {
+          documentId: args.documentId,
+          ownerTokenIdentifier,
+          contentType: metadata.contentType ?? "application/pdf",
+          storageSize: Number(metadata.size ?? contents.length),
+          sha256: createHash("sha256").update(contents).digest("hex"),
+          pageCount,
+        },
+      );
+
+      if (!completed) {
+        throw new Error("Document upload could not be finalized.");
+      }
+
+      return args.documentId;
+    } catch (error) {
+      await discardReservedUpload(
+        ctx,
+        file,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+
+      if (isPasswordProtectedPdfError(error)) {
+        throw new Error("This PDF is password-protected or encrypted.");
+      }
+
+      if (error instanceof Error && error.message.includes("pages or fewer")) {
+        throw error;
+      }
+
+      throw new Error("Could not validate the uploaded PDF.");
+    }
+  },
+});
+
+export const getDocumentPdfUrl = action({
+  args: {
+    documentId: v.id("documents"),
+  },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args): Promise<string | null> => {
+    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
+      .tokenIdentifier;
+    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier,
+    });
+
+    if (!document?.ocrGcsInputUri) {
+      return null;
+    }
+
+    const { storageClient } = createGoogleClients();
+    const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
+    const [signedUrl] = await storageClient
+      .bucket(bucketName)
+      .file(objectName)
+      .getSignedUrl({
+        action: "read",
+        expires: Date.now() + 15 * 60 * 1000,
+      });
+
+    return signedUrl;
   },
 });
