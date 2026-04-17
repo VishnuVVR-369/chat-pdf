@@ -16,6 +16,7 @@ import type { WorkspaceDocument } from "./Sidebar";
 type ChatPanelProps = {
   document: WorkspaceDocument;
   currentPage?: number;
+  onCitationSelect?: (pageNumber: number) => void;
 };
 
 type Citation = {
@@ -62,7 +63,11 @@ const SUGGESTED_QUESTIONS = [
 
 /* ─── Main component ─────────────────────────────────────────────── */
 
-export function ChatPanel({ document, currentPage }: ChatPanelProps) {
+export function ChatPanel({
+  document,
+  currentPage,
+  onCitationSelect,
+}: ChatPanelProps) {
   const conversations = useQuery(api.chatData.listConversationsForDocument, {
     documentId: document._id,
   });
@@ -134,6 +139,7 @@ export function ChatPanel({ document, currentPage }: ChatPanelProps) {
         conversationId={activeConversationId}
         currentPage={currentPage}
         document={document}
+        onCitationSelect={onCitationSelect}
         onConversationCreated={setSelectedConversation}
       />
     </div>
@@ -218,11 +224,13 @@ function ChatConversation({
   conversationId,
   currentPage,
   document,
+  onCitationSelect,
   onConversationCreated,
 }: {
   conversationId: Id<"conversations"> | null;
   currentPage?: number;
   document: WorkspaceDocument;
+  onCitationSelect?: (pageNumber: number) => void;
   onConversationCreated: (id: Id<"conversations">) => void;
 }) {
   const sendMessage = useAction(api.chat.sendMessage);
@@ -404,7 +412,11 @@ function ChatConversation({
           >
             <AnimatePresence initial={false}>
               {displayMessages.map((msg) => (
-                <ChatMessageBubble key={msg.key} message={msg} />
+                <ChatMessageBubble
+                  key={msg.key}
+                  message={msg}
+                  onCitationSelect={onCitationSelect}
+                />
               ))}
             </AnimatePresence>
 
@@ -594,7 +606,13 @@ function EmptyState({
 
 /* ─── Chat message bubble ───────────────────────────────────────── */
 
-function ChatMessageBubble({ message }: { message: ChatMessageItem }) {
+function ChatMessageBubble({
+  message,
+  onCitationSelect,
+}: {
+  message: ChatMessageItem;
+  onCitationSelect?: (pageNumber: number) => void;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -657,7 +675,10 @@ function ChatMessageBubble({ message }: { message: ChatMessageItem }) {
 
         {/* Citations */}
         {message.citations && message.citations.length > 0 && (
-          <CitationList citations={message.citations} />
+          <CitationList
+            citations={message.citations}
+            onCitationSelect={onCitationSelect}
+          />
         )}
       </div>
     </motion.div>
@@ -666,7 +687,13 @@ function ChatMessageBubble({ message }: { message: ChatMessageItem }) {
 
 /* ─── Expandable citations ──────────────────────────────────────── */
 
-function CitationList({ citations }: { citations: Citation[] }) {
+function CitationList({
+  citations,
+  onCitationSelect,
+}: {
+  citations: Citation[];
+  onCitationSelect?: (pageNumber: number) => void;
+}) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   return (
@@ -685,7 +712,10 @@ function CitationList({ citations }: { citations: Citation[] }) {
                   ? "border-amber-400/20 bg-amber-500/[0.08] px-2.5 py-1 text-amber-300"
                   : "border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-stone-400 hover:border-amber-400/15 hover:text-stone-300",
               )}
-              onClick={() => setExpandedIndex(isExpanded ? null : index)}
+              onClick={() => {
+                onCitationSelect?.(cite.pageNumber);
+                setExpandedIndex(isExpanded ? null : index);
+              }}
               type="button"
             >
               <span className="tabular-nums">p.{cite.pageNumber}</span>

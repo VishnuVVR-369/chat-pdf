@@ -51,6 +51,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     Record<string, File>
   >({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageCount, setPageCount] = useState<number | null>(null);
 
   const workspaceDocuments: WorkspaceDocument[] = documents ?? EMPTY_DOCUMENTS;
   const selectedDocument: WorkspaceDocument | null =
@@ -88,6 +89,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
       setSelectedDocumentId(workspaceDocuments[0]?._id ?? null);
     }
   }, [selectedDocumentId, workspaceDocuments]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setPageCount(selectedDocument?.pageCount ?? null);
+  }, [selectedDocument?._id, selectedDocument?.pageCount]);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,7 +263,10 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                         ? null
                         : selectedDocumentLocalFile
                     }
+                    onPageCountChange={setPageCount}
                     onPageChange={setCurrentPage}
+                    pageCount={pageCount}
+                    pageNumber={currentPage}
                     resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
@@ -267,6 +276,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                       key={selectedDocument._id}
                       document={selectedDocument}
                       currentPage={currentPage}
+                      onCitationSelect={setCurrentPage}
                     />
                   ) : (
                     <PipelineStepper
@@ -287,7 +297,10 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                         ? null
                         : selectedDocumentLocalFile
                     }
+                    onPageCountChange={setPageCount}
                     onPageChange={setCurrentPage}
+                    pageCount={pageCount}
+                    pageNumber={currentPage}
                     resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
@@ -297,6 +310,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                       key={`mobile-${selectedDocument._id}`}
                       document={selectedDocument}
                       currentPage={currentPage}
+                      onCitationSelect={setCurrentPage}
                     />
                   ) : (
                     <PipelineStepper

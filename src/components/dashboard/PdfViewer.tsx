@@ -9,6 +9,8 @@ import type { WorkspaceDocument } from "./Sidebar";
 type PdfViewerProps = {
   document: WorkspaceDocument;
   localFile?: File | null;
+  pageCount?: number | null;
+  pageNumber?: number;
   onPageChange?: (page: number) => void;
   onPageCountChange?: (count: number) => void;
   resolvedFileUrl?: string | null;
@@ -23,23 +25,54 @@ function formatFileSize(bytes: number) {
 export function PdfViewer({
   document,
   localFile,
+  pageCount: externalPageCount,
+  pageNumber: externalPageNumber,
   onPageChange,
   onPageCountChange,
   resolvedFileUrl,
 }: PdfViewerProps) {
-  const [pageNumber, setPageNumber] = useState(1);
-  const [pageCount, setPageCount] = useState<number | null>(
+  const [internalPageNumber, setInternalPageNumber] = useState(1);
+  const [internalPageCount, setInternalPageCount] = useState<number | null>(
     document.pageCount ?? null,
   );
+  const [pageInputDraft, setPageInputDraft] = useState("");
+  const [isEditingPageInput, setIsEditingPageInput] = useState(false);
+  const pageNumber = externalPageNumber ?? internalPageNumber;
+  const pageCount = externalPageCount ?? internalPageCount;
+  const pageInput = isEditingPageInput ? pageInputDraft : String(pageNumber);
 
   const handlePageCountChange = (count: number) => {
-    setPageCount(count);
+    setInternalPageCount(count);
+    const safePage = Math.min(pageNumber, count);
+    if (safePage !== pageNumber) {
+      setInternalPageNumber(safePage);
+      setPageInputDraft(String(safePage));
+      setIsEditingPageInput(false);
+      onPageChange?.(safePage);
+    }
     onPageCountChange?.(count);
   };
 
   const handleSetPage = (page: number) => {
-    setPageNumber(page);
-    onPageChange?.(page);
+    const maxPage = pageCount ?? document.pageCount ?? page;
+    const safePage = Math.min(Math.max(page, 1), maxPage);
+
+    setInternalPageNumber(safePage);
+    setPageInputDraft(String(safePage));
+    setIsEditingPageInput(false);
+    onPageChange?.(safePage);
+  };
+
+  const handlePageJump = () => {
+    const nextPage = Number.parseInt(pageInputDraft || String(pageNumber), 10);
+
+    if (Number.isNaN(nextPage)) {
+      setPageInputDraft(String(pageNumber));
+      setIsEditingPageInput(false);
+      return;
+    }
+
+    handleSetPage(nextPage);
   };
 
   return (
@@ -69,9 +102,54 @@ export function PdfViewer({
           >
             <ChevronLeftIcon />
           </Button>
-          <span className="min-w-[4rem] text-center text-xs text-stone-400 tabular-nums">
-            {pageNumber} / {pageCount ?? "–"}
-          </span>
+          <div className="flex items-center gap-2 rounded-xl border border-stone-800/80 bg-stone-950/80 px-2 py-1">
+            <label className="sr-only" htmlFor="pdf-page-jump">
+              Jump to page
+            </label>
+            <input
+              id="pdf-page-jump"
+              inputMode="numeric"
+              className="w-14 bg-transparent text-center text-xs text-stone-200 outline-none placeholder:text-stone-600"
+              max={pageCount ?? undefined}
+              min={1}
+              onBlur={handlePageJump}
+              onChange={(event) => {
+                setIsEditingPageInput(true);
+                setPageInputDraft(event.target.value.replace(/[^\d]/g, ""));
+              }}
+              onFocus={() => {
+                setIsEditingPageInput(true);
+                setPageInputDraft(String(pageNumber));
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handlePageJump();
+                }
+                if (event.key === "Escape") {
+                  setPageInputDraft(String(pageNumber));
+                  setIsEditingPageInput(false);
+                  event.currentTarget.blur();
+                }
+              }}
+              placeholder="1"
+              type="text"
+              value={pageInput}
+            />
+            <span className="text-xs text-stone-600">/</span>
+            <span className="min-w-[2.5rem] text-center text-xs text-stone-400 tabular-nums">
+              {pageCount ?? "–"}
+            </span>
+            <Button
+              className="h-6 rounded-md border-stone-700/60 px-2 text-[11px]"
+              disabled={pageCount === null}
+              onClick={handlePageJump}
+              size="xs"
+              variant="outline"
+            >
+              Go
+            </Button>
+          </div>
           <Button
             className="h-7 w-7 rounded-lg border-stone-700/60 p-0"
             disabled={pageCount === null || pageNumber >= pageCount}
