@@ -1,7 +1,7 @@
 "use client";
 
-import type { DragEvent } from "react";
-import { useCallback, useState } from "react";
+import type { ChangeEvent, DragEvent } from "react";
+import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
 
@@ -11,6 +11,7 @@ type UploadDropZoneProps = {
 
 export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: DragEvent) => {
     e.preventDefault();
@@ -38,15 +39,38 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
     [onFileSelect],
   );
 
+  const handleFileChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) {
+        return;
+      }
+
+      e.target.value = "";
+      onFileSelect(file);
+    },
+    [onFileSelect],
+  );
+
   return (
     <div className="flex h-full items-center justify-center p-8">
-      <div
+      <input
+        ref={fileInputRef}
+        accept=".pdf,application/pdf"
+        className="sr-only"
+        type="file"
+        onChange={handleFileChange}
+      />
+
+      <button
         className={cn(
           "relative flex w-full max-w-lg flex-col items-center rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-all duration-200",
           isDragging
             ? "border-amber-400/50 bg-amber-500/[0.06]"
             : "border-stone-700/50 bg-stone-900/20 hover:border-stone-600/60 hover:bg-stone-900/30",
         )}
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
@@ -67,13 +91,13 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
         </h2>
 
         <p className="mt-2 text-sm text-stone-500">
-          or use the upload button in the sidebar
+          click anywhere here or drag one in
         </p>
 
         <p className="mt-4 text-xs text-stone-600">
           PDF files up to {MAX_PDF_PAGES} pages
         </p>
-      </div>
+      </button>
     </div>
   );
 }
