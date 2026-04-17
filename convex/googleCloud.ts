@@ -3,7 +3,6 @@
 import { createPrivateKey } from "node:crypto";
 import { Storage } from "@google-cloud/storage";
 import { v1 as documentai } from "@google-cloud/documentai";
-import { GoogleGenAI } from "@google/genai";
 
 export type ServiceAccountCredentials = {
   client_email?: string;
@@ -108,45 +107,6 @@ export function createGoogleClients() {
     storageClient: new Storage({
       credentials: config.credentials,
       projectId: config.projectId,
-    }),
-  };
-}
-
-export function loadVertexEmbeddingConfig() {
-  const serviceAccountJson = getRequiredEnv(
-    "GOOGLE_DOCUMENTAI_SERVICE_ACCOUNT_JSON",
-  );
-  const credentials = parseServiceAccountCredentials(serviceAccountJson);
-
-  return {
-    credentials,
-    projectId: getRequiredEnv(
-      "GOOGLE_VERTEX_AI_PROJECT_ID",
-      process.env.GOOGLE_DOCUMENTAI_PROJECT_ID ?? credentials.project_id,
-    ),
-    location: getRequiredEnv("GOOGLE_VERTEX_AI_LOCATION", "us-central1"),
-    embeddingModel: getRequiredEnv(
-      "GOOGLE_VERTEX_AI_EMBEDDING_MODEL",
-      "gemini-embedding-2-preview",
-    ),
-    apiVersion: process.env.GOOGLE_VERTEX_AI_API_VERSION ?? "v1beta1",
-  };
-}
-
-export function createVertexEmbeddingClient() {
-  const config = loadVertexEmbeddingConfig();
-
-  return {
-    ...config,
-    client: new GoogleGenAI({
-      vertexai: true,
-      project: config.projectId,
-      location: config.location,
-      apiVersion: config.apiVersion,
-      googleAuthOptions: {
-        credentials: config.credentials,
-        projectId: config.projectId,
-      },
     }),
   };
 }

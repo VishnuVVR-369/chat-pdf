@@ -65,7 +65,32 @@ export default defineSchema({
     .index("by_documentId_and_pageNumber", ["documentId", "pageNumber"])
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
-      dimensions: 3072,
+      dimensions: 1536,
       filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
     }),
+  conversations: defineTable({
+    ownerTokenIdentifier: v.string(),
+    documentId: v.id("documents"),
+    title: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_ownerTokenIdentifier_and_documentId", [
+      "ownerTokenIdentifier",
+      "documentId",
+    ]),
+  messages: defineTable({
+    conversationId: v.id("conversations"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    citations: v.optional(
+      v.array(
+        v.object({
+          pageNumber: v.number(),
+          snippet: v.string(),
+        }),
+      ),
+    ),
+    createdAt: v.number(),
+  })
+    .index("by_conversationId", ["conversationId"]),
 });

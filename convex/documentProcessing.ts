@@ -5,15 +5,13 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { internalAction } from "./_generated/server";
-import {
-  createGoogleClients,
-  createVertexEmbeddingClient,
-} from "./googleCloud";
+import { createGoogleClients } from "./googleCloud";
+import { createOpenAiEmbeddingClient } from "./openAi";
 
 const MAX_PROCESSING_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [15_000, 60_000];
 const BATCH_PAGE_LIMIT = 100;
-const EMBEDDING_DIMENSIONS = 3072;
+const EMBEDDING_DIMENSIONS = 1536;
 const EMBEDDING_REQUEST_BATCH_SIZE = 8;
 const OCR_METHOD = "document_ai_batch" as const;
 
@@ -206,50 +204,40 @@ function getEmbeddingInput(page: PageText) {
 
 async function embedDocumentPages(pages: PageText[]) {
   if (pages.length === 0) {
-    const { embeddingModel } = createVertexEmbeddingClient();
+    const { embeddingModel } = createOpenAiEmbeddingClient();
     return {
       embeddingModel,
       embeddedPages: [] as EmbeddedPage[],
     };
   }
 
-  const { client, embeddingModel } = createVertexEmbeddingClient();
+  const { client, embeddingModel } = createOpenAiEmbeddingClient();
   const embeddedPages: EmbeddedPage[] = [];
 
   for (const batch of getBatches(pages, EMBEDDING_REQUEST_BATCH_SIZE)) {
-    const response = await client.models.embedContent({
+    const response = await client.embeddings.create({
       model: embeddingModel,
-      contents: batch.map(getEmbeddingInput),
-      config: {
-        taskType: "RETRIEVAL_DOCUMENT",
-        mimeType: "text/plain",
-        autoTruncate: false,
-      },
+      input: batch.map(getEmbeddingInput),
+      encoding_format: "float",
     });
 
-    const embeddings = response.embeddings ?? [];
+    const embeddings = response.data ?? [];
 
     if (embeddings.length !== batch.length) {
-      throw new Error("Vertex AI returned an unexpected embedding batch size.");
+      throw new Error("OpenAI returned an unexpected embedding batch size.");
     }
 
     for (const [index, page] of batch.entries()) {
       const embedding = embeddings[index];
-      const values = embedding?.values;
+      const values = embedding?.embedding;
 
       if (!values || values.length === 0) {
-        throw new Error("Vertex AI returned an empty embedding vector.");
+        throw new Error("OpenAI returned an empty embedding vector.");
       }
 
       if (values.length !== EMBEDDING_DIMENSIONS) {
         throw new Error(
-          `Vertex AI returned ${values.length} embedding dimensions, expected ${EMBEDDING_DIMENSIONS}.`,
-        );
-      }
-
-      if (embedding.statistics?.truncated) {
-        throw new Error(
-          "Vertex AI truncated an embedding input. Reduce the page payload before retrying.",
+          `OpenAI returned ${values.length} embedding dimensions, expected ${EMBEDDING_DIMENSIONS}.`,
         );
       }
 
@@ -257,9 +245,6 @@ async function embedDocumentPages(pages: PageText[]) {
         ...page,
         embedding: values,
         embeddingModel,
-        ...(embedding.statistics?.tokenCount !== undefined
-          ? { embeddingTokenCount: embedding.statistics.tokenCount }
-          : {}),
       });
     }
   }

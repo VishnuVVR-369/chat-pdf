@@ -100,7 +100,7 @@ export function DocumentPipelinePanel({
           <MetricCard label="Embedded pages" value={embeddedPageSummary} />
           <MetricCard
             label="Embedding model"
-            value={document.embeddingModel ?? "gemini-embedding-2-preview"}
+            value={document.embeddingModel ?? "text-embedding-3-small"}
           />
           <MetricCard
             label="OCR processor"

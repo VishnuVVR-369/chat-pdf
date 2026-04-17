@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { DocumentPipelinePanel } from "./DocumentPipelinePanel";
+import { ChatPanel } from "./ChatPanel";
 import { PdfViewer } from "./PdfViewer";
+import { PipelineStepper } from "./PipelineStepper";
 import { Sidebar } from "./Sidebar";
 import type { WorkspaceDocument } from "./Sidebar";
 import { UploadDropZone } from "./UploadDropZone";
@@ -50,11 +51,12 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   const [uploadedPreviewFiles, setUploadedPreviewFiles] = useState<
     Record<string, File>
   >({});
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const workspaceDocuments = documents ?? EMPTY_DOCUMENTS;
-  const selectedDocument =
+  const workspaceDocuments: WorkspaceDocument[] = documents ?? EMPTY_DOCUMENTS;
+  const selectedDocument: WorkspaceDocument | null =
     workspaceDocuments.find(
-      (document) => document._id === selectedDocumentId,
+      (d: WorkspaceDocument) => d._id === selectedDocumentId,
     ) ?? null;
   const selectedDocumentLocalFile = selectedDocumentId
     ? (uploadedPreviewFiles[selectedDocumentId] ?? null)
@@ -81,7 +83,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     if (
       selectedDocumentId &&
       !workspaceDocuments.some(
-        (document) => document._id === selectedDocumentId,
+        (d: WorkspaceDocument) => d._id === selectedDocumentId,
       )
     ) {
       setSelectedDocumentId(workspaceDocuments[0]?._id ?? null);
@@ -255,29 +257,53 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                         ? null
                         : selectedDocumentLocalFile
                     }
+                    onPageChange={setCurrentPage}
                     resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
                 <div className="w-[380px] shrink-0 xl:w-[420px]">
-                  <DocumentPipelinePanel document={selectedDocument} />
+                  {selectedDocument.status === "ready" ? (
+                    <ChatPanel
+                      key={selectedDocument._id}
+                      document={selectedDocument}
+                      currentPage={currentPage}
+                    />
+                  ) : (
+                    <PipelineStepper
+                      key={selectedDocument._id}
+                      document={selectedDocument}
+                    />
+                  )}
                 </div>
               </div>
 
               <div className="flex flex-1 flex-col lg:hidden">
                 <div className="min-h-0 flex-1">
                   <PdfViewer
-                    key={selectedDocument._id}
+                    key={`mobile-${selectedDocument._id}`}
                     document={selectedDocument}
                     localFile={
                       selectedDocumentPreviewUrl
                         ? null
                         : selectedDocumentLocalFile
                     }
+                    onPageChange={setCurrentPage}
                     resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
                 </div>
                 <div className="max-h-[40%] min-h-[280px] border-t border-stone-800/60">
-                  <DocumentPipelinePanel document={selectedDocument} />
+                  {selectedDocument.status === "ready" ? (
+                    <ChatPanel
+                      key={`mobile-${selectedDocument._id}`}
+                      document={selectedDocument}
+                      currentPage={currentPage}
+                    />
+                  ) : (
+                    <PipelineStepper
+                      key={`mobile-${selectedDocument._id}`}
+                      document={selectedDocument}
+                    />
+                  )}
                 </div>
               </div>
             </>
