@@ -31,8 +31,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
   const steps: PipelineStep[] = [];
 
   // Step 1: Upload
-  const uploadDone =
-    document.status !== "uploading";
+  const uploadDone = document.status !== "uploading";
   steps.push({
     id: "upload",
     label: "Upload",
@@ -53,8 +52,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
   const ocrActive =
     !ocrDone &&
     (document.status === "processing" || document.status === "uploaded");
-  const ocrFailed =
-    document.status === "failed" && !ocrDone;
+  const ocrFailed = document.status === "failed" && !ocrDone;
   steps.push({
     id: "ocr",
     label: "OCR Processing",
@@ -67,7 +65,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
           ? "active"
           : "pending",
     detail: ocrFailed
-      ? document.processingError ?? "OCR failed"
+      ? (document.processingError ?? "OCR failed")
       : ocrDone
         ? `${document.ocrModelOrProcessor ?? "Document AI"} · ${document.pageCount ?? "?"} pages processed`
         : ocrActive
@@ -96,7 +94,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
           ? "active"
           : "pending",
     detail: embeddingFailed
-      ? document.processingError ?? "Embedding failed"
+      ? (document.processingError ?? "Embedding failed")
       : embeddingDone
         ? `${embeddedPageCount}/${totalPages} pages · ${document.embeddingModel ?? "text-embedding-3-small"}`
         : embeddingActive
@@ -158,7 +156,7 @@ export function PipelineStepper({ document }: PipelineStepperProps) {
                 {!isLast && (
                   <div
                     className={cn(
-                      "absolute left-[15px] top-[34px] bottom-0 w-px",
+                      "absolute top-[34px] bottom-0 left-[15px] w-px",
                       step.status === "completed"
                         ? "bg-emerald-500/30"
                         : "bg-stone-800/60",

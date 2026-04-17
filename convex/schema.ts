@@ -73,11 +73,10 @@ export default defineSchema({
     documentId: v.id("documents"),
     title: v.string(),
     createdAt: v.number(),
-  })
-    .index("by_ownerTokenIdentifier_and_documentId", [
-      "ownerTokenIdentifier",
-      "documentId",
-    ]),
+  }).index("by_ownerTokenIdentifier_and_documentId", [
+    "ownerTokenIdentifier",
+    "documentId",
+  ]),
   messages: defineTable({
     conversationId: v.id("conversations"),
     role: v.union(v.literal("user"), v.literal("assistant")),
@@ -91,6 +90,5 @@ export default defineSchema({
       ),
     ),
     createdAt: v.number(),
-  })
-    .index("by_conversationId", ["conversationId"]),
+  }).index("by_conversationId", ["conversationId"]),
 });

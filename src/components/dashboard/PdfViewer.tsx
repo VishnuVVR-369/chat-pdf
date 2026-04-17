@@ -76,7 +76,9 @@ export function PdfViewer({
             className="h-7 w-7 rounded-lg border-stone-700/60 p-0"
             disabled={pageCount === null || pageNumber >= pageCount}
             onClick={() =>
-              handleSetPage(pageCount ? Math.min(pageCount, pageNumber + 1) : pageNumber)
+              handleSetPage(
+                pageCount ? Math.min(pageCount, pageNumber + 1) : pageNumber,
+              )
             }
             size="icon-xs"
             variant="outline"
