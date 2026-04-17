@@ -1,8 +1,7 @@
 import { LandingPage } from "@/components/landing/LandingPage";
-import { isAuthenticated } from "@/lib/auth-server";
 
-export default async function Home() {
-  const authenticated = await isAuthenticated();
+export const dynamic = "force-static";
 
-  return <LandingPage authenticated={authenticated} />;
+export default function Home() {
+  return <LandingPage />;
 }

@@ -1,14 +1,6 @@
-"use client";
-
-import { useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
-
-type LandingPageProps = {
-  authenticated: boolean;
-};
 
 const stats = [
   { value: "Page-linked", label: "answers with citations" },
@@ -110,10 +102,7 @@ const steps = [
   },
 ];
 
-export function LandingPage({ authenticated }: LandingPageProps) {
-  const shouldReduceMotion = useReducedMotion();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
+export function LandingPage() {
   return (
     <main className="relative min-h-screen overflow-x-clip bg-[#070707] text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
       <div
@@ -128,155 +117,55 @@ export function LandingPage({ authenticated }: LandingPageProps) {
       <div className="pointer-events-none fixed top-[22%] right-[-12%] h-[360px] w-[360px] rounded-full bg-orange-500/[0.035] blur-[130px]" />
 
       <div className="relative mx-auto max-w-6xl px-6">
-        <motion.nav
-          className="flex items-center justify-between py-6"
-          initial={shouldReduceMotion ? false : { opacity: 0, y: -16 }}
-          animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: "easeOut" }}
-        >
+        <nav className="flex items-center justify-between gap-4 py-6">
           <Link href="/">
             <BrandLogo priority />
           </Link>
 
-          <div className="hidden items-center gap-3 sm:flex">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Button
               asChild
               variant="ghost"
-              className="rounded-full border border-transparent text-stone-400 hover:border-stone-800 hover:bg-stone-900/60 hover:text-stone-100"
+              className="rounded-full border border-transparent px-3 text-stone-400 hover:border-stone-800 hover:bg-stone-900/60 hover:text-stone-100 sm:px-4"
             >
               <Link href="/sign-in">Sign in</Link>
             </Button>
             <Button
               asChild
-              className="rounded-full bg-amber-500 px-5 font-semibold text-[#070707] hover:bg-amber-400"
+              className="rounded-full bg-amber-500 px-4 font-semibold text-[#070707] hover:bg-amber-400 sm:px-5"
             >
               <Link href="/sign-up">Get started</Link>
             </Button>
           </div>
-
-          <button
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-stone-800 bg-stone-900/50 text-stone-400 transition-colors hover:bg-stone-800 hover:text-stone-200 sm:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            {mobileMenuOpen ? (
-              <svg
-                className="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            ) : (
-              <svg
-                className="h-5 w-5"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="4" y1="8" x2="20" y2="8" />
-                <line x1="4" y1="16" x2="20" y2="16" />
-              </svg>
-            )}
-          </button>
-        </motion.nav>
-
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <motion.div
-              className="overflow-hidden rounded-2xl border border-stone-800/80 bg-[#0c0c0c]/95 backdrop-blur-md sm:hidden"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-            >
-              <div className="flex flex-col gap-2 p-4">
-                <Button
-                  asChild
-                  variant="ghost"
-                  className="h-12 w-full justify-center rounded-xl text-stone-300 hover:bg-stone-800/60 hover:text-stone-100"
-                >
-                  <Link
-                    href="/sign-in"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Sign in
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  className="h-12 w-full justify-center rounded-xl bg-amber-500 font-semibold text-[#070707] hover:bg-amber-400"
-                >
-                  <Link
-                    href="/sign-up"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    Get started
-                  </Link>
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </nav>
 
         <section className="pt-14 pb-14 text-center sm:pt-20 sm:pb-18 md:pt-24 md:pb-22">
-          <FadeUp className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 text-sm text-amber-400">
-            <motion.span
-              className="h-1.5 w-1.5 rounded-full bg-amber-400"
-              animate={
-                shouldReduceMotion
-                  ? undefined
-                  : { opacity: [0.5, 1, 0.5], scale: [1, 1.15, 1] }
-              }
-              transition={{
-                duration: 2.4,
-                repeat: Number.POSITIVE_INFINITY,
-                ease: "easeInOut",
-              }}
-            />
+          <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 text-sm text-amber-400">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
             AI-powered document intelligence
-          </FadeUp>
+          </div>
 
-          <FadeUp
-            delay={0.08}
-            className="mx-auto max-w-4xl text-[2.5rem] leading-[1.08] font-bold tracking-[-0.03em] sm:text-5xl md:text-7xl md:leading-[1.03]"
-          >
+          <h1 className="mx-auto max-w-4xl text-[2.5rem] leading-[1.08] font-bold tracking-[-0.03em] sm:text-5xl md:text-7xl md:leading-[1.03]">
             Your PDFs have answers.
             <br />
             <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">
               Start asking.
             </span>
-          </FadeUp>
+          </h1>
 
-          <FadeUp
-            delay={0.16}
-            className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-stone-400 sm:mt-7 sm:text-lg"
-          >
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-stone-400 sm:mt-7 sm:text-lg">
             Upload any PDF, from research papers to contracts and manuals, and
             get instant answers grounded in the document itself. Every response
             includes citations you can verify.
-          </FadeUp>
+          </p>
 
-          <FadeUp
-            delay={0.24}
-            className="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row"
-          >
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row">
             <Button
               asChild
               size="lg"
               className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] shadow-[0_25px_60px_-24px_rgba(245,158,11,0.95)] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
             >
-              <Link href={authenticated ? "/dashboard" : "/sign-up"}>
-                {authenticated ? "Open Dashboard" : "Start for free"}
-              </Link>
+              <Link href="/sign-up">Start for free</Link>
             </Button>
             <Button
               asChild
@@ -286,16 +175,13 @@ export function LandingPage({ authenticated }: LandingPageProps) {
             >
               <Link href="/sign-in">Sign in</Link>
             </Button>
-          </FadeUp>
+          </div>
 
-          <FadeUp delay={0.3} className="mt-5 text-xs text-stone-600">
+          <p className="mt-5 text-xs text-stone-600">
             Sign in with Google or GitHub · No credit card required
-          </FadeUp>
+          </p>
 
-          <FadeUp
-            delay={0.33}
-            className="mt-8 flex items-center justify-center gap-3"
-          >
+          <div className="mt-8 flex items-center justify-center gap-3">
             <div className="flex -space-x-2">
               {[
                 "bg-amber-500/80",
@@ -303,12 +189,12 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                 "bg-amber-600/80",
                 "bg-stone-500/80",
                 "bg-amber-400/80",
-              ].map((bg, i) => (
+              ].map((bg, index) => (
                 <div
-                  key={i}
+                  key={bg}
                   className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-[#070707] text-[10px] font-semibold text-[#070707] ${bg}`}
                 >
-                  {["R", "A", "S", "K", "M"][i]}
+                  {["R", "A", "S", "K", "M"][index]}
                 </div>
               ))}
             </div>
@@ -316,12 +202,9 @@ export function LandingPage({ authenticated }: LandingPageProps) {
               Trusted by <span className="text-stone-300">researchers</span>{" "}
               &amp; <span className="text-stone-300">professionals</span>
             </p>
-          </FadeUp>
+          </div>
 
-          <FadeUp
-            delay={0.36}
-            className="mt-8 flex flex-wrap items-center justify-center gap-2.5"
-          >
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
             {proofPoints.map((item) => (
               <span
                 key={item}
@@ -330,28 +213,26 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                 {item}
               </span>
             ))}
-          </FadeUp>
+          </div>
 
-          <FadeUp
-            delay={0.42}
-            className="mt-10 grid gap-3 text-left sm:mt-12 sm:grid-cols-3"
-          >
-            {stats.map((stat, index) => (
-              <HoverCard key={stat.label} delay={index * 0.04}>
-                <div className="rounded-2xl border border-stone-800/80 bg-stone-900/35 p-5 backdrop-blur-sm">
-                  <p className="text-sm font-medium text-amber-400">
-                    {stat.value}
-                  </p>
-                  <p className="mt-2 text-sm leading-relaxed text-stone-500">
-                    {stat.label}
-                  </p>
-                </div>
-              </HoverCard>
+          <div className="mt-10 grid gap-3 text-left sm:mt-12 sm:grid-cols-3">
+            {stats.map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-stone-800/80 bg-stone-900/35 p-5 backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1"
+              >
+                <p className="text-sm font-medium text-amber-400">
+                  {stat.value}
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-stone-500">
+                  {stat.label}
+                </p>
+              </div>
             ))}
-          </FadeUp>
+          </div>
         </section>
 
-        <RevealSection className="mx-auto max-w-5xl pb-16 sm:pb-28">
+        <section className="mx-auto max-w-5xl pb-16 sm:pb-28">
           <div className="relative rounded-[2rem] border border-stone-800/80 bg-[#0c0c0c]/95 p-1 shadow-[0_45px_140px_-24px_rgba(245,158,11,0.08)]">
             <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
 
@@ -388,28 +269,10 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                       style={{ width: `${62 + Math.sin(index * 1.7) * 28}%` }}
                     />
                   ))}
-                  <motion.div
-                    className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5"
-                    animate={
-                      shouldReduceMotion
-                        ? undefined
-                        : {
-                            boxShadow: [
-                              "0 0 0 rgba(245,158,11,0)",
-                              "0 0 0 1px rgba(245,158,11,0.15)",
-                              "0 0 0 rgba(245,158,11,0)",
-                            ],
-                          }
-                    }
-                    transition={{
-                      duration: 3.6,
-                      repeat: Number.POSITIVE_INFINITY,
-                      ease: "easeInOut",
-                    }}
-                  >
+                  <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.04] p-2.5 shadow-[0_0_0_1px_rgba(245,158,11,0.12)]">
                     <div className="h-[5px] w-[92%] rounded-full bg-amber-500/25" />
                     <div className="mt-2 h-[5px] w-[68%] rounded-full bg-amber-500/18" />
-                  </motion.div>
+                  </div>
                   {Array.from({ length: 6 }, (_, index) => (
                     <div
                       key={`tail-${index}`}
@@ -435,26 +298,12 @@ export function LandingPage({ authenticated }: LandingPageProps) {
 
                 <div className="relative z-10 flex-1 space-y-4 pt-14 sm:pt-10">
                   <div className="flex justify-end">
-                    <motion.div
-                      className="max-w-[80%] origin-right rounded-2xl rounded-tr-sm border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200/80"
-                      whileHover={
-                        shouldReduceMotion
-                          ? undefined
-                          : {
-                              scale: 1.015,
-                              backgroundColor: "rgba(245, 158, 11, 0.14)",
-                            }
-                      }
-                      transition={{ duration: 0.18, ease: "easeOut" }}
-                    >
+                    <div className="max-w-[80%] rounded-2xl rounded-tr-sm border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200/80">
                       What were the key findings of this study?
-                    </motion.div>
+                    </div>
                   </div>
                   <div className="flex justify-start">
-                    <motion.div
-                      className="max-w-[85%] rounded-2xl rounded-tl-sm border border-stone-700/50 bg-stone-800/40 px-4 py-3 text-xs leading-relaxed text-stone-400"
-                      whileHover={shouldReduceMotion ? undefined : { y: -2 }}
-                    >
+                    <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-stone-700/50 bg-stone-800/40 px-4 py-3 text-xs leading-relaxed text-stone-400">
                       <p>The study identified three primary findings:</p>
                       <p className="mt-1.5">
                         1. Significant improvement in processing speed across
@@ -465,7 +314,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                         <span className="h-1 w-1 rounded-full bg-amber-400/40" />
                         <span>Paragraph 3</span>
                       </div>
-                    </motion.div>
+                    </div>
                   </div>
                 </div>
 
@@ -473,13 +322,7 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                   <span className="flex-1 text-xs text-stone-600">
                     Ask about your document...
                   </span>
-                  <motion.div
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500"
-                    whileHover={
-                      shouldReduceMotion ? undefined : { scale: 1.06 }
-                    }
-                    whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
-                  >
+                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-amber-500">
                     <svg
                       className="h-3 w-3 text-[#070707]"
                       viewBox="0 0 24 24"
@@ -491,15 +334,15 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                     >
                       <path d="M5 12h14M12 5l7 7-7 7" />
                     </svg>
-                  </motion.div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </RevealSection>
+        </section>
 
         <section className="pb-16 sm:pb-28">
-          <RevealSection className="mb-10 text-center sm:mb-14">
+          <div className="mb-10 text-center sm:mb-14">
             <p className="mb-3 text-sm font-medium tracking-[0.2em] text-amber-500/80 uppercase">
               Capabilities
             </p>
@@ -510,64 +353,62 @@ export function LandingPage({ authenticated }: LandingPageProps) {
               Focused answers, grounded citations, and a workspace that feels
               closer to analysis software than a generic chatbot.
             </p>
-          </RevealSection>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {features.map((feature, index) => (
-              <RevealSection key={feature.title} delay={index * 0.08}>
-                <HoverCard delay={index * 0.03}>
-                  <div className="group h-full rounded-2xl border border-stone-800/70 bg-stone-900/30 p-6 transition-colors hover:border-stone-700/80 hover:bg-stone-900/50">
-                    <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 transition-colors group-hover:bg-amber-500/15">
-                      {feature.icon}
-                    </div>
-                    <h3 className="mb-2 text-base font-semibold tracking-tight">
-                      {feature.title}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-stone-500">
-                      {feature.description}
-                    </p>
-                  </div>
-                </HoverCard>
-              </RevealSection>
+            {features.map((feature) => (
+              <div
+                key={feature.title}
+                className="group h-full rounded-2xl border border-stone-800/70 bg-stone-900/30 p-6 transition-[transform,border-color,background-color] duration-200 hover:-translate-y-1.5 hover:border-stone-700/80 hover:bg-stone-900/50"
+              >
+                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 transition-colors group-hover:bg-amber-500/15">
+                  {feature.icon}
+                </div>
+                <h3 className="mb-2 text-base font-semibold tracking-tight">
+                  {feature.title}
+                </h3>
+                <p className="text-sm leading-relaxed text-stone-500">
+                  {feature.description}
+                </p>
+              </div>
             ))}
           </div>
         </section>
 
         <section className="pb-16 sm:pb-28">
-          <RevealSection className="mb-10 text-center sm:mb-14">
+          <div className="mb-10 text-center sm:mb-14">
             <p className="mb-3 text-sm font-medium tracking-[0.2em] text-amber-500/80 uppercase">
               How it works
             </p>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
               Three steps to instant answers
             </h2>
-          </RevealSection>
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {steps.map((step, index) => (
-              <RevealSection key={step.number} delay={index * 0.08}>
-                <HoverCard delay={index * 0.03}>
-                  <div className="h-full rounded-2xl border border-stone-800/70 bg-[#0c0c0c] p-7">
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/15 bg-amber-500/8 text-xs font-semibold tracking-[0.18em] text-amber-500/75">
-                        {step.number}
-                      </span>
-                      <div className="h-px flex-1 bg-gradient-to-r from-amber-500/20 to-transparent" />
-                    </div>
-                    <h3 className="mt-5 mb-2 text-base font-semibold tracking-tight">
-                      {step.title}
-                    </h3>
-                    <p className="text-sm leading-relaxed text-stone-500">
-                      {step.description}
-                    </p>
-                  </div>
-                </HoverCard>
-              </RevealSection>
+            {steps.map((step) => (
+              <div
+                key={step.number}
+                className="h-full rounded-2xl border border-stone-800/70 bg-[#0c0c0c] p-7 transition-transform duration-200 hover:-translate-y-1"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/15 bg-amber-500/8 text-xs font-semibold tracking-[0.18em] text-amber-500/75">
+                    {step.number}
+                  </span>
+                  <div className="h-px flex-1 bg-gradient-to-r from-amber-500/20 to-transparent" />
+                </div>
+                <h3 className="mt-5 mb-2 text-base font-semibold tracking-tight">
+                  {step.title}
+                </h3>
+                <p className="text-sm leading-relaxed text-stone-500">
+                  {step.description}
+                </p>
+              </div>
             ))}
           </div>
         </section>
 
-        <RevealSection className="pb-24">
+        <section className="pb-24">
           <div className="relative overflow-hidden rounded-2xl border border-stone-800/70 bg-gradient-to-b from-stone-900/65 to-[#070707] px-6 py-12 text-center sm:rounded-[2rem] sm:px-8 sm:py-18">
             <div className="pointer-events-none absolute top-0 left-1/2 h-44 w-[520px] -translate-x-1/2 rounded-full bg-amber-500/[0.07] blur-[90px]" />
             <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/35 to-transparent" />
@@ -584,16 +425,14 @@ export function LandingPage({ authenticated }: LandingPageProps) {
                 size="lg"
                 className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
               >
-                <Link href={authenticated ? "/dashboard" : "/sign-up"}>
-                  {authenticated ? "Go to Dashboard" : "Get started free"}
-                </Link>
+                <Link href="/sign-up">Get started free</Link>
               </Button>
               <span className="text-xs text-stone-600">
                 No credit card · 30-second setup
               </span>
             </div>
           </div>
-        </RevealSection>
+        </section>
 
         <footer className="flex flex-col items-center justify-between gap-3 border-t border-stone-800/50 py-8 text-xs text-stone-600 sm:flex-row">
           <span>© 2026 ChatPDF</span>
@@ -605,71 +444,5 @@ export function LandingPage({ authenticated }: LandingPageProps) {
         </footer>
       </div>
     </main>
-  );
-}
-
-function FadeUp({
-  children,
-  className,
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  const shouldReduceMotion = useReducedMotion();
-
-  return (
-    <motion.div
-      className={className}
-      initial={shouldReduceMotion ? false : { opacity: 0, y: 22 }}
-      animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-      transition={{ duration: 0.65, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-function RevealSection({
-  children,
-  className,
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  className?: string;
-  delay?: number;
-}) {
-  const shouldReduceMotion = useReducedMotion();
-
-  return (
-    <motion.div
-      className={className}
-      initial={shouldReduceMotion ? false : { opacity: 0, y: 28 }}
-      whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.7, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-function HoverCard({
-  children,
-  delay = 0,
-}: {
-  children: React.ReactNode;
-  delay?: number;
-}) {
-  const shouldReduceMotion = useReducedMotion();
-
-  return (
-    <motion.div
-      whileHover={shouldReduceMotion ? undefined : { y: -6, scale: 1.01 }}
-      transition={{ duration: 0.2, delay, ease: "easeOut" }}
-    >
-      {children}
-    </motion.div>
   );
 }
