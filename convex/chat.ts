@@ -5,10 +5,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { action } from "./_generated/server";
-import {
-  createOpenAiChatClient,
-  createOpenAiEmbeddingClient,
-} from "./openAi";
+import { createOpenAiChatClient, createOpenAiEmbeddingClient } from "./openAi";
 
 const RETRIEVAL_LIMIT = 3;
 const MAX_HISTORY_MESSAGES = 20;
@@ -46,6 +43,27 @@ async function embedQuery(query: string) {
   return values;
 }
 
+function buildSystemPrompt(
+  title: string,
+  pageTexts: Array<{ pageNumber: number; text: string }>,
+) {
+  const contextBlock =
+    pageTexts.length > 0
+      ? pageTexts
+          .map((page) => `--- Page ${page.pageNumber} ---\n${page.text}`)
+          .join("\n\n")
+      : "No relevant excerpts were retrieved for this question.";
+
+  return `You are a helpful assistant that answers questions about a PDF document titled "${title}".
+
+Use ONLY the provided page excerpts to answer. If the answer is not in the excerpts, say so honestly.
+
+When referencing information, mention the page number it came from.
+
+Document excerpts:
+${contextBlock}`;
+}
+
 export const sendMessage = action({
   args: {
     documentId: v.id("documents"),
@@ -59,7 +77,10 @@ export const sendMessage = action({
       citations: v.array(citationValidator),
     }),
   }),
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     conversationId: Id<"conversations">;
     assistantMessage: {
       content: string;
@@ -68,8 +89,6 @@ export const sendMessage = action({
   }> => {
     const identity = await requireCurrentUser(ctx);
     const ownerTokenIdentifier = identity.tokenIdentifier;
-
-    // Verify document ownership and readiness
     const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
       documentId: args.documentId,
       ownerTokenIdentifier,
@@ -83,38 +102,45 @@ export const sendMessage = action({
       throw new Error("Document is not ready for chat yet.");
     }
 
-    // Create or reuse conversation
     let conversationId = args.conversationId ?? null;
 
-    if (!conversationId) {
+    if (conversationId) {
+      const conversation: {
+        _id: Id<"conversations">;
+        documentId: Id<"documents">;
+      } | null = await ctx.runQuery(internal.chatData.getOwnedConversation, {
+        conversationId,
+        ownerTokenIdentifier,
+      });
+
+      if (!conversation || conversation.documentId !== args.documentId) {
+        throw new Error("Conversation not found.");
+      }
+    } else {
       conversationId = await ctx.runMutation(
-        internal.chatMutations.createConversation,
+        internal.chatData.createConversation,
         {
           ownerTokenIdentifier,
           documentId: args.documentId,
-          title: args.content.slice(0, 80),
+          title: args.content,
         },
       );
     }
 
-    // Persist user message
-    await ctx.runMutation(internal.chatMutations.addMessage, {
+    await ctx.runMutation(internal.chatData.addMessage, {
       conversationId,
       role: "user",
       content: args.content,
     });
 
-    // Load conversation history
     const history: Array<{ role: "user" | "assistant"; content: string }> =
-      await ctx.runQuery(internal.chatQueries.getConversationHistory, {
+      await ctx.runQuery(internal.chatData.getConversationHistory, {
         conversationId,
         ownerTokenIdentifier,
         limit: MAX_HISTORY_MESSAGES,
       });
 
-    // Embed the question and retrieve relevant pages
     const queryVector = await embedQuery(args.content);
-
     const ownerDocumentKey = `${ownerTokenIdentifier}:${args.documentId}`;
     const relevantPages = await ctx.vectorSearch(
       "documentPages",
@@ -122,67 +148,30 @@ export const sendMessage = action({
       {
         vector: queryVector,
         limit: RETRIEVAL_LIMIT,
-        filter: (q) =>
-          q.eq("ownerDocumentKey", ownerDocumentKey),
+        filter: (q) => q.eq("ownerDocumentKey", ownerDocumentKey),
       },
     );
 
-    // Fetch page texts
-    const pageTexts: Array<{
-      pageNumber: number;
-      text: string;
-    }> = [];
+    const pageTexts = (
+      await ctx.runQuery(internal.chatData.getDocumentPages, {
+        pageIds: relevantPages.map((result) => result._id),
+      })
+    )
+      .map((page) => ({
+        pageNumber: page.pageNumber,
+        text: page.extractedText,
+      }))
+      .sort((a, b) => a.pageNumber - b.pageNumber);
 
-    for (const result of relevantPages) {
-      const page = await ctx.runQuery(
-        internal.chatQueries.getDocumentPageText,
-        { pageId: result._id },
-      );
-
-      if (page) {
-        pageTexts.push({
-          pageNumber: page.pageNumber,
-          text: page.extractedText,
-        });
-      }
-    }
-
-    // Sort by page number for coherent context
-    pageTexts.sort((a, b) => a.pageNumber - b.pageNumber);
-
-    // Build context and call OpenAI
-    const contextBlock = pageTexts
-      .map(
-        (page) =>
-          `--- Page ${page.pageNumber} ---\n${page.text}`,
-      )
-      .join("\n\n");
-
-    const systemPrompt = `You are a helpful assistant that answers questions about a PDF document titled "${document.title}".
-
-Use ONLY the provided page excerpts to answer. If the answer is not in the excerpts, say so honestly.
-
-When referencing information, mention the page number it came from.
-
-Document excerpts:
-${contextBlock}`;
-
+    const systemPrompt = buildSystemPrompt(document.title, pageTexts);
     const { client: chatClient, chatModel } = createOpenAiChatClient();
-
-    // Build messages array: system + history (excluding the just-added user message since it's the current turn)
-    const historyWithoutLast = history.slice(0, -1);
-
-    const chatMessages: Array<{
-      role: "system" | "user" | "assistant";
-      content: string;
-    }> = [
+    const chatMessages = [
       { role: "system", content: systemPrompt },
-      ...historyWithoutLast.map((msg) => ({
+      ...history.map((msg) => ({
         role: msg.role as "user" | "assistant",
         content: msg.content,
       })),
-      { role: "user", content: args.content },
-    ];
+    ] as Array<{ role: "system" | "user" | "assistant"; content: string }>;
 
     const completion = await chatClient.chat.completions.create({
       model: chatModel,
@@ -194,14 +183,12 @@ ${contextBlock}`;
       completion.choices[0]?.message?.content?.trim() ??
       "I could not generate a response. Please try again.";
 
-    // Build citations from retrieved pages
     const citations = pageTexts.map((page) => ({
       pageNumber: page.pageNumber,
       snippet: page.text.slice(0, 150).trim(),
     }));
 
-    // Persist assistant message
-    await ctx.runMutation(internal.chatMutations.addMessage, {
+    await ctx.runMutation(internal.chatData.addMessage, {
       conversationId,
       role: "assistant",
       content: assistantContent,

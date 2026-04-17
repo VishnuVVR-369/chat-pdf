@@ -27,26 +27,23 @@ type ConversationMessage = {
 };
 
 export function ChatPanel({ document, currentPage }: ChatPanelProps) {
-  const conversations = useQuery(api.chatQueries.listConversationsForDocument, {
+  const conversations = useQuery(api.chatData.listConversationsForDocument, {
     documentId: document._id,
   });
-  const [activeConversationId, setActiveConversationId] =
-    useState<Id<"conversations"> | null>(null);
-
-  // Auto-select latest conversation
-  useEffect(() => {
-    if (!activeConversationId && conversations && conversations.length > 0) {
-      setActiveConversationId(conversations[0]._id);
-    }
-  }, [activeConversationId, conversations]);
-
-  // Reset conversation when document changes
-  useEffect(() => {
-    setActiveConversationId(null);
-  }, [document._id]);
+  const [selectedConversation, setSelectedConversation] = useState<
+    Id<"conversations"> | "new" | null
+  >(null);
+  const activeConversationId =
+    selectedConversation === "new"
+      ? null
+      : conversations?.some(
+            (conversation) => conversation._id === selectedConversation,
+          )
+        ? selectedConversation
+        : (conversations?.[0]?._id ?? null);
 
   const handleNewConversation = () => {
-    setActiveConversationId(null);
+    setSelectedConversation("new");
   };
 
   return (
@@ -55,29 +52,37 @@ export function ChatPanel({ document, currentPage }: ChatPanelProps) {
       <div className="flex items-center justify-between gap-2 border-b border-stone-800/60 px-4 py-3">
         <div className="min-w-0">
           <h3 className="text-sm font-medium text-stone-200">Chat</h3>
-          <p className="truncate text-xs text-stone-500">
-            {document.title}
-          </p>
+          <p className="truncate text-xs text-stone-500">{document.title}</p>
         </div>
         <div className="flex items-center gap-1.5">
           {conversations && conversations.length > 0 && (
             <select
               className="h-7 rounded-lg border border-stone-700/50 bg-stone-900/60 px-2 text-xs text-stone-300 outline-none"
-              value={activeConversationId ?? ""}
+              value={
+                selectedConversation === "new"
+                  ? ""
+                  : (activeConversationId ?? "")
+              }
               onChange={(e) =>
-                setActiveConversationId(
+                setSelectedConversation(
                   e.target.value
                     ? (e.target.value as Id<"conversations">)
-                    : null,
+                    : "new",
                 )
               }
             >
               <option value="">New chat</option>
-              {conversations.map((conv: { _id: Id<"conversations">; title: string; createdAt: number }) => (
-                <option key={conv._id} value={conv._id}>
-                  {conv.title.slice(0, 40)}
-                </option>
-              ))}
+              {conversations.map(
+                (conv: {
+                  _id: Id<"conversations">;
+                  title: string;
+                  createdAt: number;
+                }) => (
+                  <option key={conv._id} value={conv._id}>
+                    {conv.title.slice(0, 40)}
+                  </option>
+                ),
+              )}
             </select>
           )}
           <button
@@ -96,7 +101,7 @@ export function ChatPanel({ document, currentPage }: ChatPanelProps) {
         conversationId={activeConversationId}
         currentPage={currentPage}
         document={document}
-        onConversationCreated={setActiveConversationId}
+        onConversationCreated={setSelectedConversation}
       />
     </div>
   );
@@ -115,7 +120,7 @@ function ChatConversation({
 }) {
   const sendMessage = useAction(api.chat.sendMessage);
   const messages = useQuery(
-    api.chatQueries.getConversationMessages,
+    api.chatData.getConversationMessages,
     conversationId ? { conversationId } : "skip",
   );
   const [input, setInput] = useState("");
@@ -155,9 +160,7 @@ function ChatConversation({
         onConversationCreated(result.conversationId);
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to send message.",
-      );
+      setError(err instanceof Error ? err.message : "Failed to send message.");
     } finally {
       setIsGenerating(false);
     }
@@ -196,7 +199,7 @@ function ChatConversation({
                     : "bg-stone-800/30 text-stone-300",
                 )}
               >
-                <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
                   {msg.content}
                 </p>
                 {msg.citations && msg.citations.length > 0 && (

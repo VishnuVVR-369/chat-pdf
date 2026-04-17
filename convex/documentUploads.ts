@@ -40,6 +40,19 @@ async function readPdfPageCount(bytes: Uint8Array) {
   return document.getPageCount();
 }
 
+async function discardReservedUpload(
+  ctx: Pick<ActionCtx, "runMutation">,
+  file: { delete(options: { ignoreNotFound: boolean }): Promise<unknown> },
+  documentId: Id<"documents">,
+  ownerTokenIdentifier: string,
+) {
+  await file.delete({ ignoreNotFound: true });
+  await ctx.runMutation(internal.documents.deleteReservedDocument, {
+    documentId,
+    ownerTokenIdentifier,
+  });
+}
+
 function buildObjectName(
   prefix: string,
   documentId: Id<"documents">,
@@ -82,13 +95,14 @@ export const createDirectUploadTarget = action({
     gcsUri: string;
     method: "PUT";
   }> => {
-    const identity = await requireCurrentUser(ctx);
+    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
+      .tokenIdentifier;
     const clients = createGoogleClients();
     const documentId: Id<"documents"> = await ctx.runMutation(
       internal.documents.reserveDirectUploadDocument,
       {
         filename: args.filename,
-        ownerTokenIdentifier: identity.tokenIdentifier,
+        ownerTokenIdentifier,
         ...(args.contentType !== undefined
           ? { contentType: args.contentType }
           : {}),
@@ -106,7 +120,7 @@ export const createDirectUploadTarget = action({
         internal.documents.setReservedDocumentInputGcsUri,
         {
           documentId,
-          ownerTokenIdentifier: identity.tokenIdentifier,
+          ownerTokenIdentifier,
           ocrGcsInputUri: gcsUri,
         },
       );
@@ -130,7 +144,7 @@ export const createDirectUploadTarget = action({
         internal.documentUploads.expireDirectUploadReservation,
         {
           documentId,
-          ownerTokenIdentifier: identity.tokenIdentifier,
+          ownerTokenIdentifier,
           gcsUri,
         },
       );
@@ -144,7 +158,7 @@ export const createDirectUploadTarget = action({
     } catch (error) {
       await ctx.runMutation(internal.documents.deleteReservedDocument, {
         documentId,
-        ownerTokenIdentifier: identity.tokenIdentifier,
+        ownerTokenIdentifier,
       });
 
       throw error;
@@ -195,11 +209,12 @@ export const completeDirectUpload = action({
   },
   returns: v.id("documents"),
   handler: async (ctx, args): Promise<Id<"documents">> => {
-    const identity = await requireCurrentUser(ctx);
+    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
+      .tokenIdentifier;
     const clients = createGoogleClients();
     const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
       documentId: args.documentId,
-      ownerTokenIdentifier: identity.tokenIdentifier,
+      ownerTokenIdentifier,
     });
 
     if (!document?.ocrGcsInputUri) {
@@ -212,22 +227,24 @@ export const completeDirectUpload = action({
     const [contents] = await file.download();
 
     if (!contents || contents.length === 0) {
-      await file.delete({ ignoreNotFound: true });
-      await ctx.runMutation(internal.documents.deleteReservedDocument, {
-        documentId: args.documentId,
-        ownerTokenIdentifier: identity.tokenIdentifier,
-      });
+      await discardReservedUpload(
+        ctx,
+        file,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
       throw new Error("Uploaded PDF is empty.");
     }
 
     const signature = contents.subarray(0, 5).toString("utf-8");
 
     if (signature !== "%PDF-") {
-      await file.delete({ ignoreNotFound: true });
-      await ctx.runMutation(internal.documents.deleteReservedDocument, {
-        documentId: args.documentId,
-        ownerTokenIdentifier: identity.tokenIdentifier,
-      });
+      await discardReservedUpload(
+        ctx,
+        file,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
       throw new Error("Only valid PDF files can be uploaded.");
     }
 
@@ -244,7 +261,7 @@ export const completeDirectUpload = action({
         internal.documents.completeDirectUploadRecord,
         {
           documentId: args.documentId,
-          ownerTokenIdentifier: identity.tokenIdentifier,
+          ownerTokenIdentifier,
           contentType: metadata.contentType ?? "application/pdf",
           storageSize: Number(metadata.size ?? contents.length),
           sha256: createHash("sha256").update(contents).digest("hex"),
@@ -258,11 +275,12 @@ export const completeDirectUpload = action({
 
       return args.documentId;
     } catch (error) {
-      await file.delete({ ignoreNotFound: true });
-      await ctx.runMutation(internal.documents.deleteReservedDocument, {
-        documentId: args.documentId,
-        ownerTokenIdentifier: identity.tokenIdentifier,
-      });
+      await discardReservedUpload(
+        ctx,
+        file,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
 
       if (isPasswordProtectedPdfError(error)) {
         throw new Error("This PDF is password-protected or encrypted.");
@@ -274,5 +292,36 @@ export const completeDirectUpload = action({
 
       throw new Error("Could not validate the uploaded PDF.");
     }
+  },
+});
+
+export const getDocumentPdfUrl = action({
+  args: {
+    documentId: v.id("documents"),
+  },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, args): Promise<string | null> => {
+    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
+      .tokenIdentifier;
+    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier,
+    });
+
+    if (!document?.ocrGcsInputUri) {
+      return null;
+    }
+
+    const { storageClient } = createGoogleClients();
+    const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
+    const [signedUrl] = await storageClient
+      .bucket(bucketName)
+      .file(objectName)
+      .getSignedUrl({
+        action: "read",
+        expires: Date.now() + 15 * 60 * 1000,
+      });
+
+    return signedUrl;
   },
 });

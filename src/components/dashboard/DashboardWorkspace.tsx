@@ -17,7 +17,6 @@ import { UploadModal } from "./UploadModal";
 type DashboardWorkspaceProps = {
   email: string | null | undefined;
   name: string | null | undefined;
-  tokenIdentifier: string;
 };
 
 const EMPTY_DOCUMENTS: WorkspaceDocument[] = [];
@@ -35,7 +34,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   const completeDirectUpload = useAction(
     api.documentUploads.completeDirectUpload,
   );
-  const getDocumentPdfUrl = useAction(api.documentAccess.getDocumentPdfUrl);
+  const getDocumentPdfUrl = useAction(api.documentUploads.getDocumentPdfUrl);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -136,14 +135,15 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   };
 
   const handleUploadFile = async (file: File): Promise<Id<"documents">> => {
+    const contentType = file.type || "application/pdf";
     const directUploadTarget = await createDirectUploadTarget({
       filename: file.name,
-      contentType: file.type || "application/pdf",
+      contentType,
     });
 
     const uploadResponse = await fetch(directUploadTarget.uploadUrl, {
       method: directUploadTarget.method,
-      headers: { "Content-Type": file.type || "application/pdf" },
+      headers: { "Content-Type": contentType },
       body: file,
     });
 

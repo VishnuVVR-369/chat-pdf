@@ -260,19 +260,16 @@ async function persistDocumentPages(
   document: DocumentSnapshot,
   pages: EmbeddedPage[],
 ) {
-  await ctx.runMutation(internal.documentProcessingState.clearDocumentPages, {
+  await ctx.runMutation(internal.documents.clearDocumentPages, {
     documentId: document.documentId,
   });
 
   for (const batch of getBatches(pages, EMBEDDING_REQUEST_BATCH_SIZE)) {
-    await ctx.runMutation(
-      internal.documentProcessingState.insertDocumentPageBatch,
-      {
-        documentId: document.documentId,
-        ownerTokenIdentifier: document.ownerTokenIdentifier,
-        pages: batch,
-      },
-    );
+    await ctx.runMutation(internal.documents.insertDocumentPageBatch, {
+      documentId: document.documentId,
+      ownerTokenIdentifier: document.ownerTokenIdentifier,
+      pages: batch,
+    });
   }
 }
 
@@ -407,7 +404,7 @@ export const runDocumentOcr = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     const document = await ctx.runMutation(
-      internal.documentProcessingState.beginProcessingAttempt,
+      internal.documents.beginProcessingAttempt,
       {
         documentId: args.documentId,
         attemptNumber: args.attemptNumber,
@@ -454,32 +451,26 @@ export const runDocumentOcr = internalAction({
       const { embeddingModel, embeddedPages } = await embedDocumentPages(pages);
 
       await persistDocumentPages(ctx, document, embeddedPages);
-      await ctx.runMutation(
-        internal.documentProcessingState.completeProcessingSuccess,
-        {
-          documentId: document.documentId,
-          attemptNumber: args.attemptNumber,
-          ocrMethod: result.method,
-          ocrModelOrProcessor: clients.processorName,
-          embeddingModel,
-          embeddedPageCount: embeddedPages.length,
-          ocrGcsInputUri: batchMetadata.inputUri,
-          ocrGcsOutputPrefix: batchMetadata.outputPrefix,
-          ocrFinalJsonGcsUri: batchMetadata.finalJsonUri,
-        },
-      );
+      await ctx.runMutation(internal.documents.completeProcessingSuccess, {
+        documentId: document.documentId,
+        attemptNumber: args.attemptNumber,
+        ocrMethod: result.method,
+        ocrModelOrProcessor: clients.processorName,
+        embeddingModel,
+        embeddedPageCount: embeddedPages.length,
+        ocrGcsInputUri: batchMetadata.inputUri,
+        ocrGcsOutputPrefix: batchMetadata.outputPrefix,
+        ocrFinalJsonGcsUri: batchMetadata.finalJsonUri,
+      });
     } catch (error) {
       const canRetry =
         isTransientError(error) && args.attemptNumber < MAX_PROCESSING_ATTEMPTS;
 
       if (canRetry) {
-        await ctx.runMutation(
-          internal.documentProcessingState.markRetryPending,
-          {
-            documentId: document.documentId,
-            attemptNumber: args.attemptNumber,
-          },
-        );
+        await ctx.runMutation(internal.documents.markRetryPending, {
+          documentId: document.documentId,
+          attemptNumber: args.attemptNumber,
+        });
 
         const retryDelay = RETRY_DELAYS_MS[args.attemptNumber - 1] ?? 60_000;
         await ctx.scheduler.runAfter(
@@ -494,21 +485,18 @@ export const runDocumentOcr = internalAction({
         return null;
       }
 
-      await ctx.runMutation(
-        internal.documentProcessingState.completeProcessingFailure,
-        {
-          documentId: document.documentId,
-          attemptNumber: args.attemptNumber,
-          errorMessage: getDisplayErrorMessage(error),
-          ...(ocrMethod !== undefined ? { ocrMethod } : {}),
-          ...(batchMetadata?.inputUri !== undefined
-            ? { ocrGcsInputUri: batchMetadata.inputUri }
-            : {}),
-          ...(batchMetadata?.outputPrefix !== undefined
-            ? { ocrGcsOutputPrefix: batchMetadata.outputPrefix }
-            : {}),
-        },
-      );
+      await ctx.runMutation(internal.documents.completeProcessingFailure, {
+        documentId: document.documentId,
+        attemptNumber: args.attemptNumber,
+        errorMessage: getDisplayErrorMessage(error),
+        ...(ocrMethod !== undefined ? { ocrMethod } : {}),
+        ...(batchMetadata?.inputUri !== undefined
+          ? { ocrGcsInputUri: batchMetadata.inputUri }
+          : {}),
+        ...(batchMetadata?.outputPrefix !== undefined
+          ? { ocrGcsOutputPrefix: batchMetadata.outputPrefix }
+          : {}),
+      });
     }
 
     return null;
