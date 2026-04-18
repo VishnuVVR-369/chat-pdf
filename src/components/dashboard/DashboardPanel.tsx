@@ -30,7 +30,7 @@ type PendingUpload = {
   file: File;
   message: string;
   pageCount: number | null;
-  status: "checking" | "ready" | "rejected" | "server_check_required";
+  status: "checking" | "ready" | "rejected";
 };
 
 export function DashboardPanel({
@@ -186,14 +186,6 @@ export function DashboardPanel({
           pageCount: result.pageCount,
           status: "ready",
         });
-      } else if (result.status === "server_check_required") {
-        pushApiEvent("pdfPreflight", result.message, "info");
-        setPendingUpload({
-          file,
-          message: result.message,
-          pageCount: null,
-          status: "server_check_required",
-        });
       } else {
         pushApiEvent("pdfPreflight", result.message, "error");
         setPendingUpload({
@@ -209,9 +201,9 @@ export function DashboardPanel({
       setPendingUpload({
         file,
         message:
-          "Could not read the PDF page count locally. You can still upload and let the server decide.",
+          "Could not validate this PDF in the browser. Please choose a different file.",
         pageCount: null,
-        status: "server_check_required",
+        status: "rejected",
       });
       pushApiEvent("pdfPreflight", message, "error");
     } finally {
@@ -281,10 +273,7 @@ export function DashboardPanel({
     }
   };
 
-  const canUpload =
-    pendingUpload !== null &&
-    pendingUpload.status !== "checking" &&
-    pendingUpload.status !== "rejected";
+  const canUpload = pendingUpload !== null && pendingUpload.status === "ready";
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.14),_transparent_26%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_48%,_#f8fafc_100%)] px-6 py-10 text-slate-950">
@@ -341,9 +330,9 @@ export function DashboardPanel({
               </h2>
               <p className="max-w-2xl text-sm leading-7 text-slate-600">
                 Select a PDF to read its page count locally first. Files with
-                more than {MAX_PDF_PAGES} pages are rejected before upload when
-                possible, and the backend enforces the same limit before
-                creating the document record.
+                more than {MAX_PDF_PAGES} pages are rejected before upload, and
+                the backend enforces the same limit before creating the document
+                record.
               </p>
             </div>
 
@@ -363,11 +352,7 @@ export function DashboardPanel({
                 disabled={!canUpload || isCheckingPdf || isUploading}
                 onClick={handleUpload}
               >
-                {isUploading
-                  ? "Uploading PDF..."
-                  : pendingUpload?.status === "server_check_required"
-                    ? "Upload And Let Server Verify"
-                    : "Upload PDF"}
+                {isUploading ? "Uploading PDF..." : "Upload PDF"}
               </Button>
             </div>
           </div>
@@ -804,8 +789,6 @@ function formatPendingUploadStatus(status: PendingUpload["status"]) {
       return "Ready to upload";
     case "rejected":
       return "Rejected";
-    case "server_check_required":
-      return "Server verification required";
   }
 }
 
