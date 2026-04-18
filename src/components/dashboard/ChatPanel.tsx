@@ -2,11 +2,12 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { WorkspaceDocument } from "./Sidebar";
@@ -43,6 +44,7 @@ type PendingExchange = {
   conversationId: Id<"conversations"> | null;
   submittedAt: number;
   user: string;
+  streamingContent?: string;
 };
 
 type ChatMessageItem = {
@@ -52,6 +54,7 @@ type ChatMessageItem = {
   key: string;
   pending?: boolean;
   role: "user" | "assistant";
+  streaming?: boolean;
 };
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -239,7 +242,6 @@ function ChatConversation({
   onCitationSelect?: (pageNumber: number) => void;
   onConversationCreated: (id: Id<"conversations">) => void;
 }) {
-  const sendMessage = useAction(api.chat.sendMessage);
   const messages = useQuery(
     api.chatData.getConversationMessages,
     conversationId ? { conversationId } : "skip",
@@ -264,9 +266,9 @@ function ChatConversation({
   }, [conversationId]);
 
   useEffect(() => {
-    if (!messages || !pendingExchange) {
-      return;
-    }
+    if (!messages || !pendingExchange) return;
+    // While still streaming don't clear — wait for the "done" SSE event first
+    if (pendingExchange.streamingContent !== undefined) return;
 
     const persistedUser = messages.some(
       (message) =>
@@ -303,31 +305,104 @@ function ChatConversation({
     setInput("");
     setError(null);
     setIsGenerating(true);
+    const submittedAt = Date.now();
     setPendingExchange({
       conversationId,
-      submittedAt: Date.now(),
+      submittedAt,
       user: question,
+      streamingContent: "",
     });
 
     try {
-      const result = await sendMessage({
-        documentId: document._id,
-        conversationId: conversationId ?? undefined,
-        content: question,
+      // Get the Convex JWT from the better-auth token endpoint
+      const { data: tokenData } = await (
+        authClient as unknown as {
+          convex: {
+            token: (
+              opts: object,
+            ) => Promise<{ data: { token: string } | null }>;
+          };
+        }
+      ).convex.token({ fetchOptions: { throw: false } });
+      const token = tokenData?.token ?? null;
+      const siteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+      if (!siteUrl)
+        throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is not configured");
+
+      const res = await fetch(`${siteUrl}/api/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          documentId: document._id,
+          conversationId: conversationId ?? undefined,
+          content: question,
+        }),
       });
 
-      setPendingExchange((current) =>
-        current
-          ? {
-              ...current,
-              assistant: result.assistantMessage,
-              conversationId: result.conversationId,
-            }
-          : null,
-      );
+      if (!res.ok || !res.body) {
+        throw new Error(`Stream request failed: ${res.status}`);
+      }
 
-      if (!conversationId) {
-        onConversationCreated(result.conversationId);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice("data: ".length).trim();
+          if (!raw) continue;
+
+          let event: { type: string; [k: string]: unknown };
+          try {
+            event = JSON.parse(raw) as typeof event;
+          } catch {
+            continue;
+          }
+
+          if (event.type === "meta") {
+            const newConvId = event.conversationId as Id<"conversations">;
+            setPendingExchange((cur) =>
+              cur ? { ...cur, conversationId: newConvId } : null,
+            );
+            if (event.isNew) {
+              onConversationCreated(newConvId);
+            }
+          } else if (event.type === "token") {
+            const tok = event.token as string;
+            setPendingExchange((cur) =>
+              cur
+                ? {
+                    ...cur,
+                    streamingContent: (cur.streamingContent ?? "") + tok,
+                  }
+                : null,
+            );
+          } else if (event.type === "done") {
+            const citations = event.citations as Citation[];
+            setPendingExchange((cur) => {
+              if (!cur) return null;
+              const content = cur.streamingContent ?? "";
+              return {
+                ...cur,
+                streamingContent: undefined,
+                assistant: { content, citations },
+              };
+            });
+          } else if (event.type === "error") {
+            throw new Error(event.error as string);
+          }
+        }
       }
     } catch (err) {
       setInput(question);
@@ -379,7 +454,17 @@ function ChatConversation({
       });
     }
 
-    if (pendingExchange.assistant) {
+    if (pendingExchange.streamingContent !== undefined) {
+      // Live streaming bubble — shown while tokens are arriving
+      displayMessages.push({
+        content: pendingExchange.streamingContent,
+        createdAt: pendingExchange.submittedAt + 1,
+        key: `pending-stream-${pendingExchange.submittedAt}`,
+        pending: true,
+        role: "assistant",
+        streaming: true,
+      });
+    } else if (pendingExchange.assistant) {
       const hasPendingAssistant = persistedMessages.some(
         (message) =>
           message.role === "assistant" &&
@@ -426,31 +511,33 @@ function ChatConversation({
               ))}
             </AnimatePresence>
 
-            {/* Typing indicator */}
+            {/* Typing indicator — only shown before first token arrives */}
             <AnimatePresence>
-              {isGenerating && !pendingExchange?.assistant && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-start gap-3"
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400/70">
-                    <SparkleIcon />
-                  </div>
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80" />
-                      <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:150ms]" />
-                      <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:300ms]" />
-                      <span className="ml-2 text-[13px] text-stone-500">
-                        Thinking...
-                      </span>
+              {isGenerating &&
+                !pendingExchange?.assistant &&
+                pendingExchange?.streamingContent === "" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex items-start gap-3"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400/70">
+                      <SparkleIcon />
                     </div>
-                  </div>
-                </motion.div>
-              )}
+                    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80" />
+                        <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:150ms]" />
+                        <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:300ms]" />
+                        <span className="ml-2 text-[13px] text-stone-500">
+                          Thinking...
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
             </AnimatePresence>
 
             <div ref={messagesEndRef} />
@@ -670,9 +757,9 @@ function ChatMessageBubble({
             </p>
           ) : (
             <Streamdown
-              animated={false}
+              animated={!!message.streaming}
               className="chat-markdown"
-              isAnimating={false}
+              isAnimating={!!message.streaming}
             >
               {message.content}
             </Streamdown>
