@@ -159,6 +159,51 @@ export const getDocumentPages = internalQuery({
   },
 });
 
+export const getDocumentSummaryContext = internalQuery({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+  },
+  returns: v.object({
+    documentSummary: v.string(),
+    pageSummaries: v.array(
+      v.object({
+        pageNumber: v.number(),
+        summary: v.string(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+    ) {
+      throw new Error("Document not found.");
+    }
+
+    const pages = await ctx.db
+      .query("documentPages")
+      .withIndex("by_ownerTokenIdentifier_and_documentId", (q) =>
+        q
+          .eq("ownerTokenIdentifier", args.ownerTokenIdentifier)
+          .eq("documentId", args.documentId),
+      )
+      .take(128);
+
+    return {
+      documentSummary: document.documentSummary,
+      pageSummaries: pages
+        .sort((a, b) => a.pageNumber - b.pageNumber)
+        .map((page) => ({
+          pageNumber: page.pageNumber,
+          summary: page.summary,
+        })),
+    };
+  },
+});
+
 export const hasDocumentChunks = internalQuery({
   args: {
     documentId: v.id("documents"),

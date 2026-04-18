@@ -6,7 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { internalAction } from "./_generated/server";
 import { createGoogleClients } from "./googleCloud";
-import { createOpenAiEmbeddingClient } from "./openAi";
+import { createOpenAiEmbeddingClient, loadOpenAiChatConfig } from "./openAi";
 
 const MAX_PROCESSING_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [15_000, 60_000];
@@ -16,7 +16,54 @@ const EMBEDDING_REQUEST_BATCH_SIZE = 64;
 const DOCUMENT_PAGE_BATCH_SIZE = 32;
 const DOCUMENT_CHUNK_WORD_TARGET = 450;
 const DOCUMENT_CHUNK_WORD_OVERLAP = 75;
+const PAGE_SUMMARY_BATCH_SIZE = 10;
 const OCR_METHOD = "document_ai_batch" as const;
+const EMPTY_PAGE_SUMMARY = "No meaningful extractable text on this page.";
+const EMPTY_DOCUMENT_SUMMARY =
+  "No meaningful extractable text was found in this document.";
+
+const pageSummaryResponseFormat = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "document_page_summaries",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        pages: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              pageNumber: { type: "number" },
+              summary: { type: "string" },
+            },
+            required: ["pageNumber", "summary"],
+          },
+        },
+      },
+      required: ["pages"],
+    },
+  },
+};
+
+const documentSummaryResponseFormat = {
+  type: "json_schema" as const,
+  json_schema: {
+    name: "document_summary",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        summary: { type: "string" },
+      },
+      required: ["summary"],
+    },
+  },
+};
 
 type OcrMethod = typeof OCR_METHOD;
 
@@ -67,6 +114,10 @@ type DocumentLike = {
 type PageText = {
   pageNumber: number;
   extractedText: string;
+};
+
+type SummarizedPage = PageText & {
+  summary: string;
 };
 
 type ChunkPageSpan = {
@@ -216,6 +267,234 @@ function getBatches<T>(items: T[], batchSize: number) {
 
 function getEmbeddingInput(text: string, fallback: string) {
   return text.trim().length > 0 ? text : fallback;
+}
+
+function normalizeSummary(summary: string, fallback: string) {
+  const normalized = summary.trim().replace(/\s+/g, " ");
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+async function fetchStructuredChatCompletion(
+  messages: Array<{
+    role: "system" | "user";
+    content: string;
+  }>,
+  responseFormat: typeof pageSummaryResponseFormat,
+  temperature?: number,
+): Promise<{ content: string; model: string }>;
+async function fetchStructuredChatCompletion(
+  messages: Array<{
+    role: "system" | "user";
+    content: string;
+  }>,
+  responseFormat: typeof documentSummaryResponseFormat,
+  temperature?: number,
+): Promise<{ content: string; model: string }>;
+async function fetchStructuredChatCompletion(
+  messages: Array<{
+    role: "system" | "user";
+    content: string;
+  }>,
+  responseFormat:
+    | typeof pageSummaryResponseFormat
+    | typeof documentSummaryResponseFormat,
+  temperature = 0.1,
+) {
+  const { apiKey, chatModel } = loadOpenAiChatConfig();
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: chatModel,
+      messages,
+      temperature,
+      response_format: responseFormat,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `OpenAI chat completion error: ${response.status} ${await response.text()}`,
+    );
+  }
+
+  const payload = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        content?: string | null;
+      };
+    }>;
+  };
+  const content = payload.choices?.[0]?.message?.content?.trim();
+
+  if (!content) {
+    throw new Error("OpenAI returned an empty structured response.");
+  }
+
+  return {
+    content,
+    model: chatModel,
+  };
+}
+
+async function generatePageSummaryBatch(pages: PageText[]) {
+  const promptPages = pages.map((page) => ({
+    pageNumber: page.pageNumber,
+    extractedText: page.extractedText,
+  }));
+  const { content } = await fetchStructuredChatCompletion(
+    [
+      {
+        role: "system",
+        content: `You summarize OCR-extracted PDF pages.
+
+Return JSON with a "pages" array. Each output item must correspond to one input page number.
+
+Rules:
+- summarize only the provided extracted text
+- keep each summary to 1 or 2 sentences
+- preserve concrete facts such as names, dates, figures, clauses, and conclusions
+- do not speculate or infer beyond the text
+- do not omit any input page`,
+      },
+      {
+        role: "user",
+        content: JSON.stringify({ pages: promptPages }),
+      },
+    ],
+    pageSummaryResponseFormat,
+    0.1,
+  );
+
+  const parsed = JSON.parse(content) as {
+    pages?: Array<{ pageNumber?: unknown; summary?: unknown }>;
+  };
+  const entries = parsed.pages;
+
+  if (!Array.isArray(entries)) {
+    throw new Error("Page summary response was missing the pages array.");
+  }
+
+  const summariesByPageNumber = new Map<number, string>();
+  for (const entry of entries) {
+    if (
+      typeof entry?.pageNumber !== "number" ||
+      typeof entry.summary !== "string"
+    ) {
+      throw new Error("Page summary response contained an invalid item.");
+    }
+
+    if (summariesByPageNumber.has(entry.pageNumber)) {
+      throw new Error(
+        `Page summary response duplicated page ${entry.pageNumber}.`,
+      );
+    }
+
+    summariesByPageNumber.set(
+      entry.pageNumber,
+      normalizeSummary(entry.summary, EMPTY_PAGE_SUMMARY),
+    );
+  }
+
+  return pages.map((page) => {
+    const summary = summariesByPageNumber.get(page.pageNumber);
+    if (!summary) {
+      throw new Error(
+        `Page summary response was missing page ${page.pageNumber}.`,
+      );
+    }
+
+    return {
+      pageNumber: page.pageNumber,
+      summary,
+    };
+  });
+}
+
+async function generatePageSummaries(pages: PageText[]) {
+  const summariesByPageNumber = new Map<number, string>();
+  const pagesNeedingSummaries = pages.filter(
+    (page) => page.extractedText.trim().length > 0,
+  );
+
+  for (const page of pages) {
+    if (page.extractedText.trim().length === 0) {
+      summariesByPageNumber.set(page.pageNumber, EMPTY_PAGE_SUMMARY);
+    }
+  }
+
+  for (const batch of getBatches(
+    pagesNeedingSummaries,
+    PAGE_SUMMARY_BATCH_SIZE,
+  )) {
+    const batchSummaries = await generatePageSummaryBatch(batch);
+    for (const summary of batchSummaries) {
+      summariesByPageNumber.set(summary.pageNumber, summary.summary);
+    }
+  }
+
+  return pages.map((page) => {
+    const summary = summariesByPageNumber.get(page.pageNumber);
+    if (!summary) {
+      throw new Error(`Missing summary for page ${page.pageNumber}.`);
+    }
+
+    return {
+      ...page,
+      summary,
+    };
+  });
+}
+
+async function generateDocumentSummary(pages: SummarizedPage[]) {
+  if (pages.every((page) => page.summary === EMPTY_PAGE_SUMMARY)) {
+    const { chatModel } = loadOpenAiChatConfig();
+    return {
+      summary: EMPTY_DOCUMENT_SUMMARY,
+      summaryModel: chatModel,
+    };
+  }
+
+  const { content, model } = await fetchStructuredChatCompletion(
+    [
+      {
+        role: "system",
+        content: `You summarize a PDF from page-level summaries.
+
+Return JSON with a single "summary" string.
+
+Rules:
+- write a compact, reusable document summary
+- cover the overall topic, major sections, and key findings or conclusions
+- stay factual and grounded in the provided page summaries
+- do not speculate or add information not present in the page summaries`,
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          pages: pages.map((page) => ({
+            pageNumber: page.pageNumber,
+            summary: page.summary,
+          })),
+        }),
+      },
+    ],
+    documentSummaryResponseFormat,
+    0.1,
+  );
+
+  const parsed = JSON.parse(content) as { summary?: unknown };
+  if (typeof parsed.summary !== "string") {
+    throw new Error("Document summary response was invalid.");
+  }
+
+  return {
+    summary: normalizeSummary(parsed.summary, EMPTY_DOCUMENT_SUMMARY),
+    summaryModel: model,
+  };
 }
 
 function tokenizeText(text: string) {
@@ -369,7 +648,7 @@ async function embedDocumentChunks(chunks: DocumentChunk[]) {
 async function persistDocumentContent(
   ctx: Pick<ActionCtx, "runMutation">,
   document: DocumentSnapshot,
-  pages: PageText[],
+  pages: SummarizedPage[],
   chunks: EmbeddedChunk[],
 ) {
   await ctx.runMutation(internal.documents.clearDocumentPages, {
@@ -574,15 +853,25 @@ export const runDocumentOcr = internalAction({
       const chunks = buildDocumentChunks(pages);
       const { embeddingModel, embeddedChunks } =
         await embedDocumentChunks(chunks);
+      const summarizedPages = await generatePageSummaries(pages);
+      const { summary, summaryModel } =
+        await generateDocumentSummary(summarizedPages);
 
-      await persistDocumentContent(ctx, document, pages, embeddedChunks);
+      await persistDocumentContent(
+        ctx,
+        document,
+        summarizedPages,
+        embeddedChunks,
+      );
       await ctx.runMutation(internal.documents.completeProcessingSuccess, {
         documentId: document.documentId,
         attemptNumber: args.attemptNumber,
         ocrMethod: result.method,
         ocrModelOrProcessor: clients.processorName,
         embeddingModel,
-        embeddedPageCount: pages.length,
+        summaryModel,
+        documentSummary: summary,
+        embeddedPageCount: summarizedPages.length,
         embeddedChunkCount: embeddedChunks.length,
         ocrGcsInputUri: batchMetadata.inputUri,
         ocrGcsOutputPrefix: batchMetadata.outputPrefix,
