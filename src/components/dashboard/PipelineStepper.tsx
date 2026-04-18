@@ -81,6 +81,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
   const embeddingFailed =
     document.status === "failed" && ocrDone && !embeddingDone;
   const embeddedPageCount = document.embeddedPageCount ?? 0;
+  const embeddedChunkCount = document.embeddedChunkCount ?? 0;
   const totalPages = document.pageCount ?? 0;
   steps.push({
     id: "embedding",
@@ -96,9 +97,9 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
     detail: embeddingFailed
       ? (document.processingError ?? "Embedding failed")
       : embeddingDone
-        ? `${embeddedPageCount}/${totalPages} pages · ${document.embeddingModel ?? "text-embedding-3-small"}`
+        ? `${embeddedChunkCount > 0 ? `${embeddedChunkCount} chunks across ` : ""}${embeddedPageCount}/${totalPages} pages · ${document.embeddingModel ?? "text-embedding-3-small"}`
         : embeddingActive
-          ? `Embedding pages... ${embeddedPageCount > 0 ? `${embeddedPageCount}/${totalPages}` : ""}`
+          ? `Embedding ${embeddedChunkCount > 0 ? `${embeddedChunkCount} chunks across ` : ""}pages... ${embeddedPageCount > 0 ? `${embeddedPageCount}/${totalPages}` : ""}`
           : "Waiting for OCR",
     timestamp: embeddingDone ? document.embeddingsCompletedAt : undefined,
   });
