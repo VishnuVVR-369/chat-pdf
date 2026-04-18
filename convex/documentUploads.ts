@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
+import { Redis } from "@upstash/redis";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -9,6 +10,8 @@ import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
 import { createGoogleClients } from "./googleCloud";
 import { MAX_PDF_PAGES } from "../src/constants/pdf";
+
+const SIGNED_URL_TTL_SECONDS = 840; // 14 min — 60s safety margin before 15-min GCS expiry
 
 const DIRECT_UPLOAD_EXPIRY_MS = 30 * 60 * 1000;
 
@@ -312,6 +315,17 @@ export const getDocumentPdfUrl = action({
       return null;
     }
 
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+
+    const cacheKey = `pdf_url:${args.documentId}`;
+    const cached = await redis.get<string>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const { storageClient } = createGoogleClients();
     const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
     const [signedUrl] = await storageClient
@@ -321,6 +335,8 @@ export const getDocumentPdfUrl = action({
         action: "read",
         expires: Date.now() + 15 * 60 * 1000,
       });
+
+    await redis.set(cacheKey, signedUrl, { ex: SIGNED_URL_TTL_SECONDS });
 
     return signedUrl;
   },
