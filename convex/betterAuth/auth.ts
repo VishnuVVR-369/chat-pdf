@@ -25,7 +25,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     secret: process.env.BETTER_AUTH_SECRET,
     database: authComponent.adapter(ctx),
     emailAndPassword: {
-      enabled: true,
+      enabled: false,
     },
     socialProviders: {
       github: {

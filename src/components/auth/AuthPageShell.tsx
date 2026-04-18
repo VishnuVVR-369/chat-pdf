@@ -2,8 +2,8 @@ import Link from "next/link";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
 type AuthPageShellProps = {
-  alternateHref: string;
-  alternateLabel: string;
+  alternateHref?: string;
+  alternateLabel?: string;
   badge: string;
   children: React.ReactNode;
   description: string;
@@ -44,12 +44,14 @@ export function AuthPageShell({
             <BrandLogo priority />
           </Link>
 
-          <Link
-            href={alternateHref}
-            className="rounded-full border border-stone-800/80 bg-stone-900/35 px-3.5 py-2 text-xs text-stone-400 transition hover:border-stone-700 hover:bg-stone-900/60 hover:text-stone-200 sm:px-4 sm:text-sm"
-          >
-            {alternateLabel}
-          </Link>
+          {alternateHref && alternateLabel ? (
+            <Link
+              href={alternateHref}
+              className="rounded-full border border-stone-800/80 bg-stone-900/35 px-3.5 py-2 text-xs text-stone-400 transition hover:border-stone-700 hover:bg-stone-900/60 hover:text-stone-200 sm:px-4 sm:text-sm"
+            >
+              {alternateLabel}
+            </Link>
+          ) : null}
         </nav>
 
         <div className="flex flex-1 items-center py-8 sm:py-12">

@@ -134,7 +134,7 @@ export function LandingPage() {
               asChild
               className="rounded-full bg-amber-500 px-4 font-semibold text-[#070707] hover:bg-amber-400 sm:px-5"
             >
-              <Link href="/sign-up">Get started</Link>
+              <Link href="/sign-in">Get started</Link>
             </Button>
           </div>
         </nav>
@@ -165,7 +165,7 @@ export function LandingPage() {
               size="lg"
               className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] shadow-[0_25px_60px_-24px_rgba(245,158,11,0.95)] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
             >
-              <Link href="/sign-up">Start for free</Link>
+              <Link href="/sign-in">Start for free</Link>
             </Button>
             <Button
               asChild
@@ -425,7 +425,7 @@ export function LandingPage() {
                 size="lg"
                 className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
               >
-                <Link href="/sign-up">Get started free</Link>
+                <Link href="/sign-in">Get started free</Link>
               </Button>
               <span className="text-xs text-stone-600">
                 No credit card · 30-second setup
