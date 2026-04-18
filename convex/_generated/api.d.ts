@@ -9,7 +9,6 @@
  */
 
 import type * as auth from "../auth.js";
-import type * as chat from "../chat.js";
 import type * as chatData from "../chatData.js";
 import type * as chatHelpers from "../chatHelpers.js";
 import type * as chatStream from "../chatStream.js";
@@ -28,7 +27,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
-  chat: typeof chat;
   chatData: typeof chatData;
   chatHelpers: typeof chatHelpers;
   chatStream: typeof chatStream;

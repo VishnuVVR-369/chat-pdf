@@ -230,6 +230,25 @@ export function parseStructuredAssistantResponse(
   }
 }
 
+export function extractAnswerFromStructuredContent(
+  content: string | null | undefined,
+) {
+  if (!content) {
+    return null;
+  }
+
+  const parsed = parseStructuredAssistantResponse(content);
+  if (parsed) {
+    return parsed.answer.trim() || null;
+  }
+
+  const extractor = createAnswerExtractor();
+  const decoded = extractor.feed(content);
+  const answer = (decoded || "").trim();
+
+  return answer.length > 0 ? answer : null;
+}
+
 export function buildSnippet(text: string, start: number, end: number) {
   const snippetStart = Math.max(0, start - 100);
   const snippetEnd = Math.min(text.length, end + 100);

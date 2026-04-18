@@ -40,11 +40,12 @@ type ConversationMessage = {
 };
 
 type PendingExchange = {
-  assistant?: Pick<ConversationMessage, "content" | "citations">;
+  assistantContent: string;
+  citations: Citation[];
   conversationId: Id<"conversations"> | null;
+  isStreaming: boolean;
   submittedAt: number;
-  user: string;
-  streamingContent?: string;
+  userContent: string;
 };
 
 type ChatMessageItem = {
@@ -69,6 +70,71 @@ const SUGGESTED_QUESTIONS = [
   { icon: "key", text: "What are the key findings?" },
   { icon: "page", text: "Explain page" },
 ];
+
+function normalizeAssistantContent(content: string) {
+  const trimmed = content.trim();
+
+  try {
+    const parsed = JSON.parse(trimmed) as { answer?: unknown };
+    if (typeof parsed.answer === "string" && parsed.answer.trim()) {
+      return parsed.answer.trim();
+    }
+  } catch {
+    // Fall through to tolerant extraction below.
+  }
+
+  const answerMatch = trimmed.match(/"answer"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (!answerMatch) {
+    return trimmed;
+  }
+
+  try {
+    return JSON.parse(`"${answerMatch[1]}"`) as string;
+  } catch {
+    return answerMatch[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r");
+  }
+}
+
+function isRecentPendingMatch(
+  createdAt: number,
+  submittedAt: number,
+  windowMs = 5_000,
+) {
+  return createdAt >= submittedAt - windowMs;
+}
+
+function matchesPendingUser(
+  message: ConversationMessage,
+  pendingExchange: PendingExchange,
+) {
+  return (
+    message.role === "user" &&
+    message.content === pendingExchange.userContent &&
+    isRecentPendingMatch(message.createdAt, pendingExchange.submittedAt)
+  );
+}
+
+function matchesPendingAssistant(
+  message: ConversationMessage,
+  pendingExchange: PendingExchange,
+) {
+  const normalizedMessageContent =
+    message.role === "assistant"
+      ? normalizeAssistantContent(message.content)
+      : message.content;
+
+  return (
+    message.role === "assistant" &&
+    pendingExchange.assistantContent.length > 0 &&
+    normalizedMessageContent === pendingExchange.assistantContent &&
+    isRecentPendingMatch(message.createdAt, pendingExchange.submittedAt)
+  );
+}
 
 /* ─── Main component ─────────────────────────────────────────────── */
 
@@ -267,23 +333,14 @@ function ChatConversation({
 
   useEffect(() => {
     if (!messages || !pendingExchange) return;
-    // While still streaming don't clear — wait for the "done" SSE event first
-    if (pendingExchange.streamingContent !== undefined) return;
+    if (pendingExchange.isStreaming) return;
 
-    const persistedUser = messages.some(
-      (message) =>
-        message.role === "user" &&
-        message.content === pendingExchange.user &&
-        message.createdAt >= pendingExchange.submittedAt - 5_000,
+    const persistedUser = messages.some((message) =>
+      matchesPendingUser(message, pendingExchange),
     );
-    const persistedAssistant =
-      !pendingExchange.assistant ||
-      messages.some(
-        (message) =>
-          message.role === "assistant" &&
-          message.content === pendingExchange.assistant?.content &&
-          message.createdAt >= pendingExchange.submittedAt - 5_000,
-      );
+    const persistedAssistant = messages.some((message) =>
+      matchesPendingAssistant(message, pendingExchange),
+    );
 
     if (persistedUser && persistedAssistant) {
       setPendingExchange(null);
@@ -307,10 +364,12 @@ function ChatConversation({
     setIsGenerating(true);
     const submittedAt = Date.now();
     setPendingExchange({
+      assistantContent: "",
+      citations: [],
       conversationId,
+      isStreaming: true,
       submittedAt,
-      user: question,
-      streamingContent: "",
+      userContent: question,
     });
 
     try {
@@ -384,19 +443,20 @@ function ChatConversation({
               cur
                 ? {
                     ...cur,
-                    streamingContent: (cur.streamingContent ?? "") + tok,
+                    assistantContent: cur.assistantContent + tok,
                   }
                 : null,
             );
           } else if (event.type === "done") {
+            const content = event.content as string | undefined;
             const citations = event.citations as Citation[];
             setPendingExchange((cur) => {
               if (!cur) return null;
-              const content = cur.streamingContent ?? "";
               return {
                 ...cur,
-                streamingContent: undefined,
-                assistant: { content, citations },
+                assistantContent: content ?? cur.assistantContent,
+                citations,
+                isStreaming: false,
               };
             });
           } else if (event.type === "error") {
@@ -429,7 +489,10 @@ function ChatConversation({
   const displayMessages: ChatMessageItem[] = persistedMessages.map(
     (message) => ({
       citations: message.citations,
-      content: message.content,
+      content:
+        message.role === "assistant"
+          ? normalizeAssistantContent(message.content)
+          : message.content,
       createdAt: message.createdAt,
       key: message._id,
       role: message.role,
@@ -437,16 +500,16 @@ function ChatConversation({
   );
 
   if (pendingExchange) {
-    const hasPendingUser = persistedMessages.some(
-      (message) =>
-        message.role === "user" &&
-        message.content === pendingExchange.user &&
-        message.createdAt >= pendingExchange.submittedAt - 5_000,
+    const hasPendingUser = persistedMessages.some((message) =>
+      matchesPendingUser(message, pendingExchange),
+    );
+    const hasPendingAssistant = persistedMessages.some((message) =>
+      matchesPendingAssistant(message, pendingExchange),
     );
 
     if (!hasPendingUser) {
       displayMessages.push({
-        content: pendingExchange.user,
+        content: pendingExchange.userContent,
         createdAt: pendingExchange.submittedAt,
         key: `pending-user-${pendingExchange.submittedAt}`,
         pending: true,
@@ -454,34 +517,18 @@ function ChatConversation({
       });
     }
 
-    if (pendingExchange.streamingContent !== undefined) {
-      // Live streaming bubble — shown while tokens are arriving
+    if (pendingExchange.assistantContent && !hasPendingAssistant) {
       displayMessages.push({
-        content: pendingExchange.streamingContent,
+        citations: pendingExchange.isStreaming
+          ? undefined
+          : pendingExchange.citations,
+        content: pendingExchange.assistantContent,
         createdAt: pendingExchange.submittedAt + 1,
-        key: `pending-stream-${pendingExchange.submittedAt}`,
+        key: `pending-assistant-${pendingExchange.submittedAt}`,
         pending: true,
         role: "assistant",
-        streaming: true,
+        streaming: pendingExchange.isStreaming,
       });
-    } else if (pendingExchange.assistant) {
-      const hasPendingAssistant = persistedMessages.some(
-        (message) =>
-          message.role === "assistant" &&
-          message.content === pendingExchange.assistant?.content &&
-          message.createdAt >= pendingExchange.submittedAt - 5_000,
-      );
-
-      if (!hasPendingAssistant) {
-        displayMessages.push({
-          citations: pendingExchange.assistant.citations,
-          content: pendingExchange.assistant.content,
-          createdAt: pendingExchange.submittedAt + 1,
-          key: `pending-assistant-${pendingExchange.submittedAt}`,
-          pending: true,
-          role: "assistant",
-        });
-      }
     }
   }
 
@@ -514,8 +561,8 @@ function ChatConversation({
             {/* Typing indicator — only shown before first token arrives */}
             <AnimatePresence>
               {isGenerating &&
-                !pendingExchange?.assistant &&
-                pendingExchange?.streamingContent === "" && (
+                pendingExchange?.isStreaming &&
+                pendingExchange.assistantContent === "" && (
                   <motion.div
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}

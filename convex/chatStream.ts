@@ -9,6 +9,7 @@ import {
   buildValidatedChunkCitations,
   createAnswerExtractor,
   embedQuery,
+  extractAnswerFromStructuredContent,
   getChunkRetrievalContext,
   parseStructuredAssistantResponse,
   structuredAnswerFormat,
@@ -160,7 +161,9 @@ export const streamChat = httpAction(async (ctx, req) => {
               content: fallback,
               citations: [],
             });
-            controller.enqueue(sseEvent({ type: "done", citations: [] }));
+            controller.enqueue(
+              sseEvent({ type: "done", content: fallback, citations: [] }),
+            );
             controller.close();
             return;
           }
@@ -244,7 +247,7 @@ export const streamChat = httpAction(async (ctx, req) => {
             );
           } else {
             assistantContent =
-              fullBuffer.trim() ||
+              extractAnswerFromStructuredContent(fullBuffer) ||
               "I could not generate a response. Please try again.";
           }
 
@@ -262,7 +265,9 @@ export const streamChat = httpAction(async (ctx, req) => {
             citations,
           });
 
-          controller.enqueue(sseEvent({ type: "done", citations }));
+          controller.enqueue(
+            sseEvent({ type: "done", content: assistantContent, citations }),
+          );
         } else {
           // Legacy path: plain text streaming, page-level citations
           const queryVector = await embedQuery(content);
@@ -373,7 +378,11 @@ export const streamChat = httpAction(async (ctx, req) => {
           });
 
           controller.enqueue(
-            sseEvent({ type: "done", citations: legacyCitations }),
+            sseEvent({
+              type: "done",
+              content: assistantContent,
+              citations: legacyCitations,
+            }),
           );
         }
       } catch (err) {
