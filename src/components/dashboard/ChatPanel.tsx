@@ -22,6 +22,12 @@ type ChatPanelProps = {
 type Citation = {
   pageNumber: number;
   snippet: string;
+  chunkId?: Id<"documentChunks">;
+  startPageNumber?: number;
+  endPageNumber?: number;
+  quote?: string;
+  quoteStartOffset?: number;
+  quoteEndOffset?: number;
 };
 
 type ConversationMessage = {

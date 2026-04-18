@@ -6,6 +6,12 @@ const messageRoleValidator = v.union(v.literal("user"), v.literal("assistant"));
 const citationValidator = v.object({
   pageNumber: v.number(),
   snippet: v.string(),
+  chunkId: v.optional(v.id("documentChunks")),
+  startPageNumber: v.optional(v.number()),
+  endPageNumber: v.optional(v.number()),
+  quote: v.optional(v.string()),
+  quoteStartOffset: v.optional(v.number()),
+  quoteEndOffset: v.optional(v.number()),
 });
 
 type AuthenticatedCtx = QueryCtx;
@@ -148,6 +154,97 @@ export const getDocumentPages = internalQuery({
     return pages.flatMap((page) =>
       page
         ? [{ pageNumber: page.pageNumber, extractedText: page.extractedText }]
+        : [],
+    );
+  },
+});
+
+export const hasDocumentChunks = internalQuery({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+  },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const chunks = await ctx.db
+      .query("documentChunks")
+      .withIndex("by_ownerTokenIdentifier_and_documentId", (q) =>
+        q
+          .eq("ownerTokenIdentifier", args.ownerTokenIdentifier)
+          .eq("documentId", args.documentId),
+      )
+      .take(1);
+
+    return chunks.length > 0;
+  },
+});
+
+export const searchDocumentChunks = internalQuery({
+  args: {
+    ownerDocumentKey: v.string(),
+    query: v.string(),
+    limit: v.number(),
+  },
+  returns: v.array(v.id("documentChunks")),
+  handler: async (ctx, args) => {
+    const queryText = args.query.trim();
+
+    if (queryText.length === 0) {
+      return [];
+    }
+
+    const chunks = await ctx.db
+      .query("documentChunks")
+      .withSearchIndex("search_text", (q) =>
+        q
+          .search("text", queryText)
+          .eq("ownerDocumentKey", args.ownerDocumentKey),
+      )
+      .take(args.limit);
+
+    return chunks.map((chunk) => chunk._id);
+  },
+});
+
+export const getDocumentChunks = internalQuery({
+  args: {
+    chunkIds: v.array(v.id("documentChunks")),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("documentChunks"),
+      chunkIndex: v.number(),
+      startPageNumber: v.number(),
+      endPageNumber: v.number(),
+      text: v.string(),
+      tokenCount: v.number(),
+      pageSpans: v.array(
+        v.object({
+          pageNumber: v.number(),
+          startOffset: v.number(),
+          endOffset: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const chunks = await Promise.all(
+      args.chunkIds.map((chunkId) => ctx.db.get(chunkId)),
+    );
+
+    return chunks.flatMap((chunk) =>
+      chunk
+        ? [
+            {
+              _id: chunk._id,
+              chunkIndex: chunk.chunkIndex,
+              startPageNumber: chunk.startPageNumber,
+              endPageNumber: chunk.endPageNumber,
+              text: chunk.text,
+              tokenCount: chunk.tokenCount,
+              pageSpans: chunk.pageSpans,
+            },
+          ]
         : [],
     );
   },

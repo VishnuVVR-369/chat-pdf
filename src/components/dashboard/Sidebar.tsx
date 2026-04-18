@@ -26,6 +26,7 @@ export type WorkspaceDocument = {
   ocrModelOrProcessor?: string;
   embeddingModel?: string;
   embeddedPageCount?: number;
+  embeddedChunkCount?: number;
   fileUrl: string | null;
   ocrGcsInputUri?: string;
   ocrFinalJsonGcsUri?: string;

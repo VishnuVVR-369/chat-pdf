@@ -13,6 +13,9 @@ const RETRY_DELAYS_MS = [15_000, 60_000];
 const BATCH_PAGE_LIMIT = 100;
 const EMBEDDING_DIMENSIONS = 1536;
 const EMBEDDING_REQUEST_BATCH_SIZE = 8;
+const DOCUMENT_PAGE_BATCH_SIZE = 32;
+const DOCUMENT_CHUNK_WORD_TARGET = 450;
+const DOCUMENT_CHUNK_WORD_OVERLAP = 75;
 const OCR_METHOD = "document_ai_batch" as const;
 
 type OcrMethod = typeof OCR_METHOD;
@@ -66,7 +69,22 @@ type PageText = {
   extractedText: string;
 };
 
-type EmbeddedPage = PageText & {
+type ChunkPageSpan = {
+  pageNumber: number;
+  startOffset: number;
+  endOffset: number;
+};
+
+type DocumentChunk = {
+  chunkIndex: number;
+  startPageNumber: number;
+  endPageNumber: number;
+  text: string;
+  tokenCount: number;
+  pageSpans: ChunkPageSpan[];
+};
+
+type EmbeddedChunk = DocumentChunk & {
   embedding: number[];
   embeddingModel: string;
   embeddingTokenCount?: number;
@@ -196,28 +214,121 @@ function getBatches<T>(items: T[], batchSize: number) {
   return batches;
 }
 
-function getEmbeddingInput(page: PageText) {
-  return page.extractedText.trim().length > 0
-    ? page.extractedText
-    : `[No extractable text found on page ${page.pageNumber} of the PDF.]`;
+function getEmbeddingInput(text: string, fallback: string) {
+  return text.trim().length > 0 ? text : fallback;
 }
 
-async function embedDocumentPages(pages: PageText[]) {
-  if (pages.length === 0) {
+function tokenizeText(text: string) {
+  return text.match(/\S+/g) ?? [];
+}
+
+function buildDocumentChunks(pages: PageText[]): DocumentChunk[] {
+  const allTokens = pages.flatMap((page) =>
+    tokenizeText(page.extractedText).map((token) => ({
+      pageNumber: page.pageNumber,
+      token,
+    })),
+  );
+
+  if (allTokens.length === 0) {
+    const startPageNumber = pages[0]?.pageNumber ?? 1;
+    const endPageNumber = pages.at(-1)?.pageNumber ?? startPageNumber;
+    const text = "[No extractable text found in this PDF.]";
+
+    return [
+      {
+        chunkIndex: 0,
+        startPageNumber,
+        endPageNumber,
+        text,
+        tokenCount: tokenizeText(text).length,
+        pageSpans: [
+          {
+            pageNumber: startPageNumber,
+            startOffset: 0,
+            endOffset: text.length,
+          },
+        ],
+      },
+    ];
+  }
+
+  const chunks: DocumentChunk[] = [];
+  let start = 0;
+  let chunkIndex = 0;
+
+  while (start < allTokens.length) {
+    const end = Math.min(start + DOCUMENT_CHUNK_WORD_TARGET, allTokens.length);
+    const slice = allTokens.slice(start, end);
+    const parts: string[] = [];
+    const pageSpans: ChunkPageSpan[] = [];
+    let currentOffset = 0;
+
+    for (const [index, tokenInfo] of slice.entries()) {
+      if (index > 0) {
+        parts.push(" ");
+        currentOffset += 1;
+      }
+
+      const startOffset = currentOffset;
+      parts.push(tokenInfo.token);
+      currentOffset += tokenInfo.token.length;
+
+      const lastPageSpan = pageSpans[pageSpans.length - 1];
+      if (lastPageSpan?.pageNumber === tokenInfo.pageNumber) {
+        lastPageSpan.endOffset = currentOffset;
+      } else {
+        pageSpans.push({
+          pageNumber: tokenInfo.pageNumber,
+          startOffset,
+          endOffset: currentOffset,
+        });
+      }
+    }
+
+    chunks.push({
+      chunkIndex,
+      startPageNumber: pageSpans[0]?.pageNumber ?? slice[0].pageNumber,
+      endPageNumber:
+        pageSpans[pageSpans.length - 1]?.pageNumber ??
+        slice[slice.length - 1].pageNumber,
+      text: parts.join(""),
+      tokenCount: slice.length,
+      pageSpans,
+    });
+
+    if (end >= allTokens.length) {
+      break;
+    }
+
+    start = Math.max(start + 1, end - DOCUMENT_CHUNK_WORD_OVERLAP);
+    chunkIndex += 1;
+  }
+
+  return chunks;
+}
+
+async function embedDocumentChunks(chunks: DocumentChunk[]) {
+  if (chunks.length === 0) {
     const { embeddingModel } = createOpenAiEmbeddingClient();
     return {
       embeddingModel,
-      embeddedPages: [] as EmbeddedPage[],
+      embeddedChunks: [] as EmbeddedChunk[],
     };
   }
 
   const { client, embeddingModel } = createOpenAiEmbeddingClient();
-  const embeddedPages: EmbeddedPage[] = [];
+  const embeddedChunks: EmbeddedChunk[] = [];
 
-  for (const batch of getBatches(pages, EMBEDDING_REQUEST_BATCH_SIZE)) {
+  for (const batch of getBatches(chunks, EMBEDDING_REQUEST_BATCH_SIZE)) {
     const response = await client.embeddings.create({
       model: embeddingModel,
-      input: batch.map(getEmbeddingInput),
+      input: batch.map((chunk) =>
+        getEmbeddingInput(
+          chunk.text,
+          `[No extractable text found in chunk ${chunk.chunkIndex} of the PDF.]`,
+        ),
+      ),
       encoding_format: "float",
     });
 
@@ -227,7 +338,7 @@ async function embedDocumentPages(pages: PageText[]) {
       throw new Error("OpenAI returned an unexpected embedding batch size.");
     }
 
-    for (const [index, page] of batch.entries()) {
+    for (const [index, chunk] of batch.entries()) {
       const embedding = embeddings[index];
       const values = embedding?.embedding;
 
@@ -241,8 +352,8 @@ async function embedDocumentPages(pages: PageText[]) {
         );
       }
 
-      embeddedPages.push({
-        ...page,
+      embeddedChunks.push({
+        ...chunk,
         embedding: values,
         embeddingModel,
       });
@@ -251,24 +362,36 @@ async function embedDocumentPages(pages: PageText[]) {
 
   return {
     embeddingModel,
-    embeddedPages,
+    embeddedChunks,
   };
 }
 
-async function persistDocumentPages(
+async function persistDocumentContent(
   ctx: Pick<ActionCtx, "runMutation">,
   document: DocumentSnapshot,
-  pages: EmbeddedPage[],
+  pages: PageText[],
+  chunks: EmbeddedChunk[],
 ) {
   await ctx.runMutation(internal.documents.clearDocumentPages, {
     documentId: document.documentId,
   });
+  await ctx.runMutation(internal.documents.clearDocumentChunks, {
+    documentId: document.documentId,
+  });
 
-  for (const batch of getBatches(pages, EMBEDDING_REQUEST_BATCH_SIZE)) {
+  for (const batch of getBatches(pages, DOCUMENT_PAGE_BATCH_SIZE)) {
     await ctx.runMutation(internal.documents.insertDocumentPageBatch, {
       documentId: document.documentId,
       ownerTokenIdentifier: document.ownerTokenIdentifier,
       pages: batch,
+    });
+  }
+
+  for (const batch of getBatches(chunks, EMBEDDING_REQUEST_BATCH_SIZE)) {
+    await ctx.runMutation(internal.documents.insertDocumentChunkBatch, {
+      documentId: document.documentId,
+      ownerTokenIdentifier: document.ownerTokenIdentifier,
+      chunks: batch,
     });
   }
 }
@@ -448,16 +571,19 @@ export const runDocumentOcr = internalAction({
       );
 
       const pages = extractPageTexts(result.documents, document.pageCount);
-      const { embeddingModel, embeddedPages } = await embedDocumentPages(pages);
+      const chunks = buildDocumentChunks(pages);
+      const { embeddingModel, embeddedChunks } =
+        await embedDocumentChunks(chunks);
 
-      await persistDocumentPages(ctx, document, embeddedPages);
+      await persistDocumentContent(ctx, document, pages, embeddedChunks);
       await ctx.runMutation(internal.documents.completeProcessingSuccess, {
         documentId: document.documentId,
         attemptNumber: args.attemptNumber,
         ocrMethod: result.method,
         ocrModelOrProcessor: clients.processorName,
         embeddingModel,
-        embeddedPageCount: embeddedPages.length,
+        embeddedPageCount: pages.length,
+        embeddedChunkCount: embeddedChunks.length,
         ocrGcsInputUri: batchMetadata.inputUri,
         ocrGcsOutputPrefix: batchMetadata.outputPrefix,
         ocrFinalJsonGcsUri: batchMetadata.finalJsonUri,

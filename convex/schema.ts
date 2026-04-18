@@ -34,6 +34,7 @@ export default defineSchema({
     ocrModelOrProcessor: v.optional(v.string()),
     embeddingModel: v.optional(v.string()),
     embeddedPageCount: v.optional(v.number()),
+    embeddedChunkCount: v.optional(v.number()),
     ocrGcsInputUri: v.optional(v.string()),
     ocrGcsOutputPrefix: v.optional(v.string()),
     ocrFinalJsonGcsUri: v.optional(v.string()),
@@ -68,6 +69,39 @@ export default defineSchema({
       dimensions: 1536,
       filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
     }),
+  documentChunks: defineTable({
+    ownerTokenIdentifier: v.string(),
+    ownerDocumentKey: v.string(),
+    documentId: v.id("documents"),
+    chunkIndex: v.number(),
+    startPageNumber: v.number(),
+    endPageNumber: v.number(),
+    text: v.string(),
+    tokenCount: v.number(),
+    pageSpans: v.array(
+      v.object({
+        pageNumber: v.number(),
+        startOffset: v.number(),
+        endOffset: v.number(),
+      }),
+    ),
+    embedding: v.array(v.float64()),
+    embeddingModel: v.string(),
+  })
+    .index("by_ownerTokenIdentifier_and_documentId", [
+      "ownerTokenIdentifier",
+      "documentId",
+    ])
+    .index("by_documentId_and_chunkIndex", ["documentId", "chunkIndex"])
+    .searchIndex("search_text", {
+      searchField: "text",
+      filterFields: ["ownerDocumentKey"],
+    })
+    .vectorIndex("by_embedding", {
+      vectorField: "embedding",
+      dimensions: 1536,
+      filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
+    }),
   conversations: defineTable({
     ownerTokenIdentifier: v.string(),
     documentId: v.id("documents"),
@@ -86,6 +120,12 @@ export default defineSchema({
         v.object({
           pageNumber: v.number(),
           snippet: v.string(),
+          chunkId: v.optional(v.id("documentChunks")),
+          startPageNumber: v.optional(v.number()),
+          endPageNumber: v.optional(v.number()),
+          quote: v.optional(v.string()),
+          quoteStartOffset: v.optional(v.number()),
+          quoteEndOffset: v.optional(v.number()),
         }),
       ),
     ),

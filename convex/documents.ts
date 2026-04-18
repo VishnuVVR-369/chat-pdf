@@ -32,6 +32,7 @@ const documentListItemValidator = v.object({
   ocrModelOrProcessor: v.optional(v.string()),
   embeddingModel: v.optional(v.string()),
   embeddedPageCount: v.optional(v.number()),
+  embeddedChunkCount: v.optional(v.number()),
   ocrGcsInputUri: v.optional(v.string()),
   ocrFinalJsonGcsUri: v.optional(v.string()),
   fileUrl: v.union(v.string(), v.null()),
@@ -99,6 +100,7 @@ function toDocumentListItem(document: Doc<"documents">) {
     ocrModelOrProcessor: document.ocrModelOrProcessor,
     embeddingModel: document.embeddingModel,
     embeddedPageCount: document.embeddedPageCount,
+    embeddedChunkCount: document.embeddedChunkCount,
     ocrGcsInputUri: document.ocrGcsInputUri,
     ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri,
     fileUrl: null,
@@ -298,8 +300,8 @@ export const insertDocumentPageBatch = internalMutation({
       v.object({
         pageNumber: v.number(),
         extractedText: v.string(),
-        embedding: v.array(v.float64()),
-        embeddingModel: v.string(),
+        embedding: v.optional(v.array(v.float64())),
+        embeddingModel: v.optional(v.string()),
         embeddingTokenCount: v.optional(v.number()),
       }),
     ),
@@ -316,11 +318,85 @@ export const insertDocumentPageBatch = internalMutation({
         pageNumber: page.pageNumber,
         extractedText: page.extractedText,
         extractionMethod: "ocr",
-        embedding: page.embedding,
-        embeddingModel: page.embeddingModel,
+        ...(page.embedding !== undefined ? { embedding: page.embedding } : {}),
+        ...(page.embeddingModel !== undefined
+          ? { embeddingModel: page.embeddingModel }
+          : {}),
         ...(page.embeddingTokenCount !== undefined
           ? { embeddingTokenCount: page.embeddingTokenCount }
           : {}),
+      });
+    }
+
+    return null;
+  },
+});
+
+export const clearDocumentChunks = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    while (true) {
+      const chunks = await ctx.db
+        .query("documentChunks")
+        .withIndex("by_documentId_and_chunkIndex", (q) =>
+          q.eq("documentId", args.documentId),
+        )
+        .take(128);
+
+      if (chunks.length === 0) {
+        return null;
+      }
+
+      for (const chunk of chunks) {
+        await ctx.db.delete(chunk._id);
+      }
+    }
+  },
+});
+
+export const insertDocumentChunkBatch = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    chunks: v.array(
+      v.object({
+        chunkIndex: v.number(),
+        startPageNumber: v.number(),
+        endPageNumber: v.number(),
+        text: v.string(),
+        tokenCount: v.number(),
+        pageSpans: v.array(
+          v.object({
+            pageNumber: v.number(),
+            startOffset: v.number(),
+            endOffset: v.number(),
+          }),
+        ),
+        embedding: v.array(v.float64()),
+        embeddingModel: v.string(),
+      }),
+    ),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
+
+    for (const chunk of args.chunks) {
+      await ctx.db.insert("documentChunks", {
+        ownerTokenIdentifier: args.ownerTokenIdentifier,
+        ownerDocumentKey,
+        documentId: args.documentId,
+        chunkIndex: chunk.chunkIndex,
+        startPageNumber: chunk.startPageNumber,
+        endPageNumber: chunk.endPageNumber,
+        text: chunk.text,
+        tokenCount: chunk.tokenCount,
+        pageSpans: chunk.pageSpans,
+        embedding: chunk.embedding,
+        embeddingModel: chunk.embeddingModel,
       });
     }
 
@@ -336,6 +412,7 @@ export const completeProcessingSuccess = internalMutation({
     ocrModelOrProcessor: v.string(),
     embeddingModel: v.string(),
     embeddedPageCount: v.number(),
+    embeddedChunkCount: v.optional(v.number()),
     ocrGcsInputUri: v.optional(v.string()),
     ocrGcsOutputPrefix: v.optional(v.string()),
     ocrFinalJsonGcsUri: v.optional(v.string()),
@@ -363,6 +440,9 @@ export const completeProcessingSuccess = internalMutation({
       ocrModelOrProcessor: args.ocrModelOrProcessor,
       embeddingModel: args.embeddingModel,
       embeddedPageCount: args.embeddedPageCount,
+      ...(args.embeddedChunkCount !== undefined
+        ? { embeddedChunkCount: args.embeddedChunkCount }
+        : {}),
       ...(args.ocrGcsInputUri !== undefined
         ? { ocrGcsInputUri: args.ocrGcsInputUri }
         : {}),
