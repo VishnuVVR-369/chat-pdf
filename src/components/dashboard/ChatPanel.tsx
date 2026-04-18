@@ -2,11 +2,12 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { Streamdown } from "streamdown";
 import { cn } from "@/lib/utils";
+import { authClient } from "@/lib/auth-client";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { WorkspaceDocument } from "./Sidebar";
@@ -39,10 +40,12 @@ type ConversationMessage = {
 };
 
 type PendingExchange = {
-  assistant?: Pick<ConversationMessage, "content" | "citations">;
+  assistantContent: string;
+  citations: Citation[];
   conversationId: Id<"conversations"> | null;
+  isStreaming: boolean;
   submittedAt: number;
-  user: string;
+  userContent: string;
 };
 
 type ChatMessageItem = {
@@ -52,6 +55,7 @@ type ChatMessageItem = {
   key: string;
   pending?: boolean;
   role: "user" | "assistant";
+  streaming?: boolean;
 };
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -66,6 +70,71 @@ const SUGGESTED_QUESTIONS = [
   { icon: "key", text: "What are the key findings?" },
   { icon: "page", text: "Explain page" },
 ];
+
+function normalizeAssistantContent(content: string) {
+  const trimmed = content.trim();
+
+  try {
+    const parsed = JSON.parse(trimmed) as { answer?: unknown };
+    if (typeof parsed.answer === "string" && parsed.answer.trim()) {
+      return parsed.answer.trim();
+    }
+  } catch {
+    // Fall through to tolerant extraction below.
+  }
+
+  const answerMatch = trimmed.match(/"answer"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (!answerMatch) {
+    return trimmed;
+  }
+
+  try {
+    return JSON.parse(`"${answerMatch[1]}"`) as string;
+  } catch {
+    return answerMatch[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\\r/g, "\r");
+  }
+}
+
+function isRecentPendingMatch(
+  createdAt: number,
+  submittedAt: number,
+  windowMs = 5_000,
+) {
+  return createdAt >= submittedAt - windowMs;
+}
+
+function matchesPendingUser(
+  message: ConversationMessage,
+  pendingExchange: PendingExchange,
+) {
+  return (
+    message.role === "user" &&
+    message.content === pendingExchange.userContent &&
+    isRecentPendingMatch(message.createdAt, pendingExchange.submittedAt)
+  );
+}
+
+function matchesPendingAssistant(
+  message: ConversationMessage,
+  pendingExchange: PendingExchange,
+) {
+  const normalizedMessageContent =
+    message.role === "assistant"
+      ? normalizeAssistantContent(message.content)
+      : message.content;
+
+  return (
+    message.role === "assistant" &&
+    pendingExchange.assistantContent.length > 0 &&
+    normalizedMessageContent === pendingExchange.assistantContent &&
+    isRecentPendingMatch(message.createdAt, pendingExchange.submittedAt)
+  );
+}
 
 /* ─── Main component ─────────────────────────────────────────────── */
 
@@ -239,7 +308,6 @@ function ChatConversation({
   onCitationSelect?: (pageNumber: number) => void;
   onConversationCreated: (id: Id<"conversations">) => void;
 }) {
-  const sendMessage = useAction(api.chat.sendMessage);
   const messages = useQuery(
     api.chatData.getConversationMessages,
     conversationId ? { conversationId } : "skip",
@@ -264,24 +332,15 @@ function ChatConversation({
   }, [conversationId]);
 
   useEffect(() => {
-    if (!messages || !pendingExchange) {
-      return;
-    }
+    if (!messages || !pendingExchange) return;
+    if (pendingExchange.isStreaming) return;
 
-    const persistedUser = messages.some(
-      (message) =>
-        message.role === "user" &&
-        message.content === pendingExchange.user &&
-        message.createdAt >= pendingExchange.submittedAt - 5_000,
+    const persistedUser = messages.some((message) =>
+      matchesPendingUser(message, pendingExchange),
     );
-    const persistedAssistant =
-      !pendingExchange.assistant ||
-      messages.some(
-        (message) =>
-          message.role === "assistant" &&
-          message.content === pendingExchange.assistant?.content &&
-          message.createdAt >= pendingExchange.submittedAt - 5_000,
-      );
+    const persistedAssistant = messages.some((message) =>
+      matchesPendingAssistant(message, pendingExchange),
+    );
 
     if (persistedUser && persistedAssistant) {
       setPendingExchange(null);
@@ -303,31 +362,107 @@ function ChatConversation({
     setInput("");
     setError(null);
     setIsGenerating(true);
+    const submittedAt = Date.now();
     setPendingExchange({
+      assistantContent: "",
+      citations: [],
       conversationId,
-      submittedAt: Date.now(),
-      user: question,
+      isStreaming: true,
+      submittedAt,
+      userContent: question,
     });
 
     try {
-      const result = await sendMessage({
-        documentId: document._id,
-        conversationId: conversationId ?? undefined,
-        content: question,
+      // Get the Convex JWT from the better-auth token endpoint
+      const { data: tokenData } = await (
+        authClient as unknown as {
+          convex: {
+            token: (
+              opts: object,
+            ) => Promise<{ data: { token: string } | null }>;
+          };
+        }
+      ).convex.token({ fetchOptions: { throw: false } });
+      const token = tokenData?.token ?? null;
+      const siteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+      if (!siteUrl)
+        throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is not configured");
+
+      const res = await fetch(`${siteUrl}/api/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          documentId: document._id,
+          conversationId: conversationId ?? undefined,
+          content: question,
+        }),
       });
 
-      setPendingExchange((current) =>
-        current
-          ? {
-              ...current,
-              assistant: result.assistantMessage,
-              conversationId: result.conversationId,
-            }
-          : null,
-      );
+      if (!res.ok || !res.body) {
+        throw new Error(`Stream request failed: ${res.status}`);
+      }
 
-      if (!conversationId) {
-        onConversationCreated(result.conversationId);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const raw = line.slice("data: ".length).trim();
+          if (!raw) continue;
+
+          let event: { type: string; [k: string]: unknown };
+          try {
+            event = JSON.parse(raw) as typeof event;
+          } catch {
+            continue;
+          }
+
+          if (event.type === "meta") {
+            const newConvId = event.conversationId as Id<"conversations">;
+            setPendingExchange((cur) =>
+              cur ? { ...cur, conversationId: newConvId } : null,
+            );
+            if (event.isNew) {
+              onConversationCreated(newConvId);
+            }
+          } else if (event.type === "token") {
+            const tok = event.token as string;
+            setPendingExchange((cur) =>
+              cur
+                ? {
+                    ...cur,
+                    assistantContent: cur.assistantContent + tok,
+                  }
+                : null,
+            );
+          } else if (event.type === "done") {
+            const content = event.content as string | undefined;
+            const citations = event.citations as Citation[];
+            setPendingExchange((cur) => {
+              if (!cur) return null;
+              return {
+                ...cur,
+                assistantContent: content ?? cur.assistantContent,
+                citations,
+                isStreaming: false,
+              };
+            });
+          } else if (event.type === "error") {
+            throw new Error(event.error as string);
+          }
+        }
       }
     } catch (err) {
       setInput(question);
@@ -354,7 +489,10 @@ function ChatConversation({
   const displayMessages: ChatMessageItem[] = persistedMessages.map(
     (message) => ({
       citations: message.citations,
-      content: message.content,
+      content:
+        message.role === "assistant"
+          ? normalizeAssistantContent(message.content)
+          : message.content,
       createdAt: message.createdAt,
       key: message._id,
       role: message.role,
@@ -362,16 +500,16 @@ function ChatConversation({
   );
 
   if (pendingExchange) {
-    const hasPendingUser = persistedMessages.some(
-      (message) =>
-        message.role === "user" &&
-        message.content === pendingExchange.user &&
-        message.createdAt >= pendingExchange.submittedAt - 5_000,
+    const hasPendingUser = persistedMessages.some((message) =>
+      matchesPendingUser(message, pendingExchange),
+    );
+    const hasPendingAssistant = persistedMessages.some((message) =>
+      matchesPendingAssistant(message, pendingExchange),
     );
 
     if (!hasPendingUser) {
       displayMessages.push({
-        content: pendingExchange.user,
+        content: pendingExchange.userContent,
         createdAt: pendingExchange.submittedAt,
         key: `pending-user-${pendingExchange.submittedAt}`,
         pending: true,
@@ -379,24 +517,18 @@ function ChatConversation({
       });
     }
 
-    if (pendingExchange.assistant) {
-      const hasPendingAssistant = persistedMessages.some(
-        (message) =>
-          message.role === "assistant" &&
-          message.content === pendingExchange.assistant?.content &&
-          message.createdAt >= pendingExchange.submittedAt - 5_000,
-      );
-
-      if (!hasPendingAssistant) {
-        displayMessages.push({
-          citations: pendingExchange.assistant.citations,
-          content: pendingExchange.assistant.content,
-          createdAt: pendingExchange.submittedAt + 1,
-          key: `pending-assistant-${pendingExchange.submittedAt}`,
-          pending: true,
-          role: "assistant",
-        });
-      }
+    if (pendingExchange.assistantContent && !hasPendingAssistant) {
+      displayMessages.push({
+        citations: pendingExchange.isStreaming
+          ? undefined
+          : pendingExchange.citations,
+        content: pendingExchange.assistantContent,
+        createdAt: pendingExchange.submittedAt + 1,
+        key: `pending-assistant-${pendingExchange.submittedAt}`,
+        pending: true,
+        role: "assistant",
+        streaming: pendingExchange.isStreaming,
+      });
     }
   }
 
@@ -426,31 +558,33 @@ function ChatConversation({
               ))}
             </AnimatePresence>
 
-            {/* Typing indicator */}
+            {/* Typing indicator — only shown before first token arrives */}
             <AnimatePresence>
-              {isGenerating && !pendingExchange?.assistant && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-start gap-3"
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400/70">
-                    <SparkleIcon />
-                  </div>
-                  <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80" />
-                      <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:150ms]" />
-                      <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:300ms]" />
-                      <span className="ml-2 text-[13px] text-stone-500">
-                        Thinking...
-                      </span>
+              {isGenerating &&
+                pendingExchange?.isStreaming &&
+                pendingExchange.assistantContent === "" && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex items-start gap-3"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-400/70">
+                      <SparkleIcon />
                     </div>
-                  </div>
-                </motion.div>
-              )}
+                    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80" />
+                        <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:150ms]" />
+                        <span className="chat-typing-dot inline-block h-1.5 w-1.5 rounded-full bg-amber-400/80 [animation-delay:300ms]" />
+                        <span className="ml-2 text-[13px] text-stone-500">
+                          Thinking...
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
             </AnimatePresence>
 
             <div ref={messagesEndRef} />
@@ -670,9 +804,9 @@ function ChatMessageBubble({
             </p>
           ) : (
             <Streamdown
-              animated={false}
+              animated={!!message.streaming}
               className="chat-markdown"
-              isAnimating={false}
+              isAnimating={!!message.streaming}
             >
               {message.content}
             </Streamdown>
