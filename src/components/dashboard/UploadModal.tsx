@@ -97,8 +97,7 @@ export function UploadModal({
           return;
         }
 
-        const pageCount = result.status === "ready" ? result.pageCount : null;
-        setPhase({ type: "uploading", file, pageCount });
+        setPhase({ type: "uploading", file, pageCount: result.pageCount });
 
         const documentId = await onUpload(file);
         setPhase({ type: "success", documentId, file });

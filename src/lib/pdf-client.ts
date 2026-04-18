@@ -1,7 +1,3 @@
-import {
-  getDocument,
-  GlobalWorkerOptions,
-} from "pdfjs-dist/legacy/build/pdf.mjs";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
 
 export type PdfPreflightResult =
@@ -14,50 +10,26 @@ export type PdfPreflightResult =
       status: "rejected";
       message: string;
       pageCount?: number;
-    }
-  | {
-      status: "server_check_required";
-      message: string;
     };
-
-let workerConfigured = false;
-
-function ensurePdfWorkerConfigured() {
-  if (workerConfigured || typeof window === "undefined") {
-    return;
-  }
-
-  GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.mjs",
-    import.meta.url,
-  ).toString();
-  workerConfigured = true;
-}
 
 function isPasswordProtectedPdfError(error: unknown) {
   return (
     error instanceof Error &&
     (error.name === "PasswordException" ||
-      error.message.toLowerCase().includes("password"))
+      error.message.toLowerCase().includes("password") ||
+      error.message.toLowerCase().includes("encrypt"))
   );
 }
 
 async function readPdfPageCount(bytes: Uint8Array) {
-  ensurePdfWorkerConfigured();
-
-  const loadingTask = getDocument({
-    data: bytes,
-    isEvalSupported: false,
-    stopAtErrors: true,
-    useWorkerFetch: false,
+  const { PDFDocument } = await import("pdf-lib");
+  const document = await PDFDocument.load(bytes, {
+    ignoreEncryption: false,
+    throwOnInvalidObject: true,
+    updateMetadata: false,
   });
 
-  try {
-    const document = await loadingTask.promise;
-    return document.numPages;
-  } finally {
-    await loadingTask.destroy();
-  }
+  return document.getPageCount();
 }
 
 export async function inspectPdfFile(file: File): Promise<PdfPreflightResult> {
@@ -96,9 +68,9 @@ export async function inspectPdfFile(file: File): Promise<PdfPreflightResult> {
     }
 
     return {
-      status: "server_check_required",
+      status: "rejected",
       message:
-        "Could not read the PDF page count locally. You can still upload and let the server decide.",
+        "Could not validate this PDF in the browser. Please choose a different file.",
     };
   }
 }
