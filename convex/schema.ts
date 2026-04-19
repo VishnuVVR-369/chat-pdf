@@ -70,7 +70,7 @@ export default defineSchema({
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 1536,
-      filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
+      filterFields: ["documentId"],
     }),
   documentChunks: defineTable({
     ownerTokenIdentifier: v.string(),
@@ -103,7 +103,7 @@ export default defineSchema({
     .vectorIndex("by_embedding", {
       vectorField: "embedding",
       dimensions: 1536,
-      filterFields: ["ownerTokenIdentifier", "ownerDocumentKey"],
+      filterFields: ["documentId"],
     }),
   conversations: defineTable({
     ownerTokenIdentifier: v.string(),
