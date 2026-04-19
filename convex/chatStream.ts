@@ -3,15 +3,18 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   MAX_HISTORY_MESSAGES,
-  LEGACY_RETRIEVAL_LIMIT,
+  buildSummarySources,
   buildChunkSystemPrompt,
-  buildLegacySystemPrompt,
+  buildSummarySystemPrompt,
   buildValidatedChunkCitations,
+  buildValidatedSummaryCitations,
   createAnswerExtractor,
-  embedQuery,
   extractAnswerFromStructuredContent,
   getChunkRetrievalContext,
   parseStructuredAssistantResponse,
+  parseSummaryAssistantResponse,
+  routeChatQuery,
+  summaryAnswerFormat,
   structuredAnswerFormat,
 } from "./chatHelpers";
 
@@ -28,8 +31,73 @@ function sseEvent(data: unknown): Uint8Array {
 function getChatConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-  const model = process.env.OPENAI_CHAT_MODEL ?? "gpt-4o-mini";
+  const model = process.env.OPENAI_CHAT_MODEL ?? "gpt-5.4-mini";
   return { apiKey, model };
+}
+
+async function streamStructuredAnswer(args: {
+  apiKey: string;
+  model: string;
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  temperature: number;
+  responseFormat: typeof structuredAnswerFormat | typeof summaryAnswerFormat;
+  onToken: (token: string) => void;
+}) {
+  const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${args.apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: args.model,
+      messages: args.messages,
+      temperature: args.temperature,
+      response_format: args.responseFormat,
+      stream: true,
+    }),
+  });
+
+  if (!openaiRes.ok || !openaiRes.body) {
+    throw new Error(`OpenAI API error: ${openaiRes.status}`);
+  }
+
+  const extractor = createAnswerExtractor();
+  const reader = openaiRes.body.getReader();
+  const decoder = new TextDecoder();
+  let sseBuffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    sseBuffer += decoder.decode(value, { stream: true });
+
+    const lines = sseBuffer.split("\n");
+    sseBuffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const raw = line.slice("data: ".length).trim();
+      if (raw === "[DONE]") break;
+      let parsed: { choices?: Array<{ delta?: { content?: string } }> };
+      try {
+        parsed = JSON.parse(raw) as typeof parsed;
+      } catch {
+        continue;
+      }
+      const delta = parsed.choices?.[0]?.delta?.content ?? "";
+      if (!delta) continue;
+      const decoded = extractor.feed(delta);
+      if (decoded) {
+        args.onToken(decoded);
+      }
+    }
+  }
+
+  return {
+    rawBuffer: extractor.rawBuffer,
+    complete: extractor.complete,
+  };
 }
 
 export const streamChat = httpAction(async (ctx, req) => {
@@ -89,6 +157,16 @@ export const streamChat = httpAction(async (ctx, req) => {
     );
   }
 
+  if (document.documentSummary.trim().length === 0) {
+    return new Response(
+      JSON.stringify({ error: "Document is missing summary artifacts" }),
+      {
+        status: 500,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      },
+    );
+  }
+
   let conversationId: Id<"conversations">;
   const isNewConversation = !rawConversationId;
 
@@ -135,6 +213,16 @@ export const streamChat = httpAction(async (ctx, req) => {
     ownerTokenIdentifier,
   });
 
+  if (!hasChunkData) {
+    return new Response(
+      JSON.stringify({ error: "Document is missing retrieval chunks" }),
+      {
+        status: 500,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      },
+    );
+  }
+
   const responseStream = new ReadableStream({
     async start(controller) {
       controller.enqueue(
@@ -143,12 +231,95 @@ export const streamChat = httpAction(async (ctx, req) => {
 
       try {
         const { apiKey, model } = getChatConfig();
+        const routing = await routeChatQuery({
+          title: document.title,
+          history: history.slice(0, -1),
+          currentUserMessage: content,
+        });
 
-        if (hasChunkData) {
+        if (routing.retrievalMode === "summaries") {
+          const summaryContext = await ctx.runQuery(
+            internal.chatData.getDocumentSummaryContext,
+            {
+              documentId: documentId as Id<"documents">,
+              ownerTokenIdentifier,
+            },
+          );
+
+          if (
+            summaryContext.documentSummary.trim().length === 0 ||
+            summaryContext.pageSummaries.length === 0
+          ) {
+            throw new Error("Ready document is missing summary artifacts.");
+          }
+
+          const summarySources = buildSummarySources(
+            summaryContext.pageSummaries,
+          );
+          const systemPrompt = buildSummarySystemPrompt(
+            document.title,
+            summaryContext.documentSummary,
+            summarySources,
+          );
+          const chatMessages = [
+            { role: "system" as const, content: systemPrompt },
+            ...history.map((m) => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            })),
+          ];
+
+          const streamed = await streamStructuredAnswer({
+            apiKey,
+            model,
+            messages: chatMessages,
+            temperature: 0.1,
+            responseFormat: summaryAnswerFormat,
+            onToken: (token) =>
+              controller.enqueue(sseEvent({ type: "token", token })),
+          });
+
+          const structuredResponse = parseSummaryAssistantResponse(
+            streamed.rawBuffer,
+          );
+          let assistantContent: string;
+          let citations: ReturnType<typeof buildValidatedSummaryCitations> = [];
+
+          if (structuredResponse) {
+            assistantContent =
+              structuredResponse.answer.trim() ||
+              "I could not generate a response. Please try again.";
+            citations = buildValidatedSummaryCitations(
+              structuredResponse.citations,
+              summarySources,
+            );
+          } else {
+            assistantContent =
+              extractAnswerFromStructuredContent(streamed.rawBuffer) ||
+              "I could not generate a response. Please try again.";
+          }
+
+          if (!streamed.complete && assistantContent) {
+            controller.enqueue(
+              sseEvent({ type: "token", token: assistantContent }),
+            );
+          }
+
+          await ctx.runMutation(internal.chatData.addMessage, {
+            conversationId,
+            role: "assistant",
+            content: assistantContent,
+            citations,
+          });
+
+          controller.enqueue(
+            sseEvent({ type: "done", content: assistantContent, citations }),
+          );
+        } else {
           const chunks = await getChunkRetrievalContext(ctx, {
             documentId: documentId as Id<"documents">,
             ownerTokenIdentifier,
-            query: content,
+            query: routing.standaloneQuery,
           });
 
           if (chunks.length === 0) {
@@ -177,61 +348,17 @@ export const streamChat = httpAction(async (ctx, req) => {
             })),
           ];
 
-          const openaiRes = await fetch(
-            "https://api.openai.com/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model,
-                messages: chatMessages,
-                temperature: 0.1,
-                response_format: structuredAnswerFormat,
-                stream: true,
-              }),
-            },
-          );
+          const streamed = await streamStructuredAnswer({
+            apiKey,
+            model,
+            messages: chatMessages,
+            temperature: 0.1,
+            responseFormat: structuredAnswerFormat,
+            onToken: (token) =>
+              controller.enqueue(sseEvent({ type: "token", token })),
+          });
 
-          if (!openaiRes.ok || !openaiRes.body) {
-            throw new Error(`OpenAI API error: ${openaiRes.status}`);
-          }
-
-          const extractor = createAnswerExtractor();
-          const reader = openaiRes.body.getReader();
-          const decoder = new TextDecoder();
-          let sseBuffer = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            sseBuffer += decoder.decode(value, { stream: true });
-
-            const lines = sseBuffer.split("\n");
-            sseBuffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              const raw = line.slice("data: ".length).trim();
-              if (raw === "[DONE]") break;
-              let parsed: { choices?: Array<{ delta?: { content?: string } }> };
-              try {
-                parsed = JSON.parse(raw) as typeof parsed;
-              } catch {
-                continue;
-              }
-              const delta = parsed.choices?.[0]?.delta?.content ?? "";
-              if (!delta) continue;
-              const decoded = extractor.feed(delta);
-              if (decoded) {
-                controller.enqueue(sseEvent({ type: "token", token: decoded }));
-              }
-            }
-          }
-
-          const fullBuffer = extractor.rawBuffer;
+          const fullBuffer = streamed.rawBuffer;
           const structuredResponse =
             parseStructuredAssistantResponse(fullBuffer);
           let assistantContent: string;
@@ -252,7 +379,7 @@ export const streamChat = httpAction(async (ctx, req) => {
           }
 
           // If the answer wasn't streamed (e.g. citations came first), emit it now
-          if (!extractor.complete && assistantContent) {
+          if (!streamed.complete && assistantContent) {
             controller.enqueue(
               sseEvent({ type: "token", token: assistantContent }),
             );
@@ -267,122 +394,6 @@ export const streamChat = httpAction(async (ctx, req) => {
 
           controller.enqueue(
             sseEvent({ type: "done", content: assistantContent, citations }),
-          );
-        } else {
-          // Legacy path: plain text streaming, page-level citations
-          const queryVector = await embedQuery(content);
-          const ownerDocumentKey = `${ownerTokenIdentifier}:${documentId}`;
-          const relevantPages = await ctx.vectorSearch(
-            "documentPages",
-            "by_embedding",
-            {
-              vector: queryVector,
-              limit: LEGACY_RETRIEVAL_LIMIT,
-              filter: (q) => q.eq("ownerDocumentKey", ownerDocumentKey),
-            },
-          );
-
-          const pageTexts = (
-            await ctx.runQuery(internal.chatData.getDocumentPages, {
-              pageIds: relevantPages.map((r) => r._id),
-            })
-          )
-            .map((page) => ({
-              pageNumber: page.pageNumber,
-              text: page.extractedText,
-            }))
-            .sort((a, b) => a.pageNumber - b.pageNumber);
-
-          const systemPrompt = buildLegacySystemPrompt(
-            document.title,
-            pageTexts,
-          );
-          const chatMessages = [
-            { role: "system" as const, content: systemPrompt },
-            ...history.map((m) => ({
-              role: m.role as "user" | "assistant",
-              content: m.content,
-            })),
-          ];
-
-          const openaiRes = await fetch(
-            "https://api.openai.com/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model,
-                messages: chatMessages,
-                temperature: 0.3,
-                stream: true,
-              }),
-            },
-          );
-
-          if (!openaiRes.ok || !openaiRes.body) {
-            throw new Error(`OpenAI API error: ${openaiRes.status}`);
-          }
-
-          let assistantContent = "";
-          const reader = openaiRes.body.getReader();
-          const decoder = new TextDecoder();
-          let sseBuffer = "";
-
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            sseBuffer += decoder.decode(value, { stream: true });
-
-            const lines = sseBuffer.split("\n");
-            sseBuffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-              const raw = line.slice("data: ".length).trim();
-              if (raw === "[DONE]") break;
-              let parsed: { choices?: Array<{ delta?: { content?: string } }> };
-              try {
-                parsed = JSON.parse(raw) as typeof parsed;
-              } catch {
-                continue;
-              }
-              const token = parsed.choices?.[0]?.delta?.content ?? "";
-              if (token) {
-                assistantContent += token;
-                controller.enqueue(sseEvent({ type: "token", token }));
-              }
-            }
-          }
-
-          if (!assistantContent) {
-            assistantContent =
-              "I could not generate a response. Please try again.";
-            controller.enqueue(
-              sseEvent({ type: "token", token: assistantContent }),
-            );
-          }
-
-          const legacyCitations = pageTexts.map((page) => ({
-            pageNumber: page.pageNumber,
-            snippet: page.text.slice(0, 150).trim(),
-          }));
-
-          await ctx.runMutation(internal.chatData.addMessage, {
-            conversationId,
-            role: "assistant",
-            content: assistantContent,
-            citations: legacyCitations,
-          });
-
-          controller.enqueue(
-            sseEvent({
-              type: "done",
-              content: assistantContent,
-              citations: legacyCitations,
-            }),
           );
         }
       } catch (err) {

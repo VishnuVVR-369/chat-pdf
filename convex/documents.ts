@@ -119,6 +119,8 @@ export const reserveDirectUploadDocument = internalMutation({
       ownerTokenIdentifier: args.ownerTokenIdentifier,
       title: deriveDocumentTitle(args.filename),
       originalFilename: args.filename,
+      documentSummary: "",
+      summaryModel: "",
       storageSize: 0,
       sha256: "",
       status: "uploading",
@@ -300,6 +302,7 @@ export const insertDocumentPageBatch = internalMutation({
       v.object({
         pageNumber: v.number(),
         extractedText: v.string(),
+        summary: v.string(),
         embedding: v.optional(v.array(v.float64())),
         embeddingModel: v.optional(v.string()),
         embeddingTokenCount: v.optional(v.number()),
@@ -317,6 +320,7 @@ export const insertDocumentPageBatch = internalMutation({
         documentId: args.documentId,
         pageNumber: page.pageNumber,
         extractedText: page.extractedText,
+        summary: page.summary,
         extractionMethod: "ocr",
         ...(page.embedding !== undefined ? { embedding: page.embedding } : {}),
         ...(page.embeddingModel !== undefined
@@ -411,6 +415,8 @@ export const completeProcessingSuccess = internalMutation({
     ocrMethod: ocrMethodValidator,
     ocrModelOrProcessor: v.string(),
     embeddingModel: v.string(),
+    summaryModel: v.string(),
+    documentSummary: v.string(),
     embeddedPageCount: v.number(),
     embeddedChunkCount: v.optional(v.number()),
     ocrGcsInputUri: v.optional(v.string()),
@@ -439,6 +445,8 @@ export const completeProcessingSuccess = internalMutation({
       ocrProvider: "google_document_ai",
       ocrModelOrProcessor: args.ocrModelOrProcessor,
       embeddingModel: args.embeddingModel,
+      summaryModel: args.summaryModel,
+      documentSummary: args.documentSummary,
       embeddedPageCount: args.embeddedPageCount,
       ...(args.embeddedChunkCount !== undefined
         ? { embeddedChunkCount: args.embeddedChunkCount }
@@ -548,6 +556,7 @@ export const getOwnedDocument = internalQuery({
       ownerTokenIdentifier: v.string(),
       status: documentStatusValidator,
       title: v.string(),
+      documentSummary: v.string(),
       originalFilename: v.string(),
       ocrGcsInputUri: v.optional(v.string()),
       ocrFinalJsonGcsUri: v.optional(v.string()),
@@ -569,6 +578,7 @@ export const getOwnedDocument = internalQuery({
       ownerTokenIdentifier: document.ownerTokenIdentifier,
       status: document.status,
       title: document.title,
+      documentSummary: document.documentSummary,
       originalFilename: document.originalFilename,
       ...(document.ocrGcsInputUri !== undefined
         ? { ocrGcsInputUri: document.ocrGcsInputUri }
