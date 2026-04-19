@@ -667,7 +667,7 @@ export async function getChunkRetrievalContext(
     {
       vector: queryVector,
       limit: HYBRID_VECTOR_LIMIT,
-      filter: (q) => q.eq("ownerDocumentKey", ownerDocumentKey),
+      filter: (q) => q.eq("documentId", args.documentId),
     },
   );
   const lexicalIds = await lexicalSearchPromise;
