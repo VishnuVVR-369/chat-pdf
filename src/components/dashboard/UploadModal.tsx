@@ -3,15 +3,6 @@
 import type { DragEvent, ChangeEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import {
-  Cancel01Icon,
-  Cancel02Icon,
-  LockIcon,
-  Pdf01Icon,
-  Tick02Icon,
-  Upload04Icon,
-} from "@hugeicons/core-free-icons";
 import { inspectPdfFile } from "@/lib/pdf-client";
 import { cn } from "@/lib/utils";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
@@ -204,11 +195,7 @@ export function UploadModal({
             <div className="flex items-center justify-between border-b border-stone-800/60 px-5 pt-5 pb-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                  <HugeiconsIcon
-                    icon={Upload04Icon}
-                    size={14}
-                    strokeWidth={1.8}
-                  />
+                  <UploadIcon size={14} />
                 </div>
                 <h2 className="text-sm font-semibold text-stone-200">
                   Upload PDF
@@ -216,16 +203,11 @@ export function UploadModal({
               </div>
               {!isProcessing && (
                 <button
-                  aria-label="Close"
-                  className="focus-ring flex h-7 w-7 items-center justify-center rounded-lg text-stone-600 transition-colors hover:bg-stone-800 hover:text-stone-300"
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-stone-600 transition-colors hover:bg-stone-800 hover:text-stone-300"
                   type="button"
                   onClick={onClose}
                 >
-                  <HugeiconsIcon
-                    icon={Cancel01Icon}
-                    size={14}
-                    strokeWidth={2}
-                  />
+                  <CloseIcon />
                 </button>
               )}
             </div>
@@ -244,7 +226,7 @@ export function UploadModal({
                   >
                     <button
                       className={cn(
-                        "focus-ring group relative flex w-full cursor-pointer flex-col items-center rounded-xl border-2 border-dashed px-8 py-14 text-center transition-colors duration-200",
+                        "group relative flex w-full cursor-pointer flex-col items-center rounded-xl border-2 border-dashed px-8 py-14 text-center transition-all duration-200",
                         isDragging
                           ? "border-amber-400/60 bg-amber-500/[0.04]"
                           : "border-stone-700/60 hover:border-stone-600/70 hover:bg-stone-800/20",
@@ -252,24 +234,21 @@ export function UploadModal({
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                     >
+                      {/* Icon */}
                       <div
                         className={cn(
-                          "mb-5 flex h-16 w-16 items-center justify-center rounded-2xl transition-colors duration-200",
+                          "mb-5 flex h-16 w-16 items-center justify-center rounded-2xl transition-all duration-300",
                           isDragging
-                            ? "bg-amber-500/15 text-amber-400"
+                            ? "scale-110 bg-amber-500/15 text-amber-400"
                             : "bg-stone-800/80 text-stone-500 group-hover:bg-stone-800 group-hover:text-stone-400",
                         )}
                       >
-                        <HugeiconsIcon
-                          icon={Upload04Icon}
-                          size={28}
-                          strokeWidth={1.6}
-                        />
+                        <UploadIcon size={28} />
                       </div>
 
                       <p
                         className={cn(
-                          "text-md font-medium transition-colors duration-200",
+                          "text-base font-medium transition-colors duration-200",
                           isDragging ? "text-amber-300" : "text-stone-300",
                         )}
                       >
@@ -286,11 +265,7 @@ export function UploadModal({
                       </p>
 
                       <div className="mt-6 flex items-center gap-1.5 text-xs text-stone-700">
-                        <HugeiconsIcon
-                          icon={LockIcon}
-                          size={11}
-                          strokeWidth={1.8}
-                        />
+                        <LockIcon />
                         <span>PDF files · up to {MAX_PDF_PAGES} pages</span>
                       </div>
                     </button>
@@ -356,11 +331,7 @@ export function UploadModal({
                         />
                       </svg>
                       <div className="absolute inset-0 flex items-center justify-center text-amber-400">
-                        <HugeiconsIcon
-                          icon={Pdf01Icon}
-                          size={20}
-                          strokeWidth={1.8}
-                        />
+                        <PdfFileIcon />
                       </div>
                     </div>
 
@@ -400,11 +371,7 @@ export function UploadModal({
                         ease: [0.16, 1, 0.3, 1],
                       }}
                     >
-                      <HugeiconsIcon
-                        icon={Tick02Icon}
-                        size={28}
-                        strokeWidth={2}
-                      />
+                      <CheckIcon />
                     </motion.div>
                     <p className="text-sm font-semibold text-stone-200">
                       Upload complete!
@@ -426,17 +393,13 @@ export function UploadModal({
                     transition={{ duration: 0.2 }}
                   >
                     <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-400">
-                      <HugeiconsIcon
-                        icon={Cancel02Icon}
-                        size={28}
-                        strokeWidth={1.8}
-                      />
+                      <ErrorIcon />
                     </div>
                     <p className="max-w-[250px] text-center text-sm leading-relaxed text-stone-300">
                       {phase.message}
                     </p>
                     <button
-                      className="focus-ring mt-5 rounded-lg border border-stone-700/60 bg-stone-800/60 px-4 py-2 text-sm font-medium text-stone-200 transition-colors hover:border-stone-600 hover:bg-stone-700/80"
+                      className="mt-5 rounded-lg border border-stone-700/60 bg-stone-800/60 px-4 py-2 text-sm font-medium text-stone-200 transition-colors hover:border-stone-600 hover:bg-stone-700/80"
                       type="button"
                       onClick={() => {
                         setPhase({ type: "idle" });
@@ -453,5 +416,114 @@ export function UploadModal({
         </div>
       )}
     </AnimatePresence>
+  );
+}
+
+// ── Icons ──────────────────────────────────────────────────────────────────
+
+function UploadIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg
+      fill="none"
+      height={size}
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width={size}
+    >
+      <path d="M12 13v8" />
+      <path d="m8 17 4-4 4 4" />
+      <path d="M20 16.7A4.5 4.5 0 0 0 17.5 8h-1.1A7 7 0 1 0 4 14.9" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      fill="none"
+      height="14"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="14"
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+function PdfFileIcon() {
+  return (
+    <svg
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+      <polyline points="14 2 14 8 20 8" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      fill="none"
+      height="28"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="28"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function ErrorIcon() {
+  return (
+    <svg
+      fill="none"
+      height="28"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="28"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" x2="12" y1="8" y2="12" />
+      <line x1="12" x2="12.01" y1="16" y2="16" />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      fill="none"
+      height="11"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="11"
+    >
+      <rect height="11" rx="2" ry="2" width="18" x="3" y="11" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
   );
 }

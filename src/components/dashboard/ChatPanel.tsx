@@ -9,7 +9,6 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
   ArrowUp01Icon,
-  LockIcon,
   PlusSignIcon,
   SparklesIcon,
   Time04Icon,
@@ -19,7 +18,6 @@ import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import { PipelineStepper } from "./PipelineStepper";
 import type { WorkspaceDocument } from "./Sidebar";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
@@ -169,11 +167,9 @@ export function ChatPanel({
   currentPage,
   onCitationSelect,
 }: ChatPanelProps) {
-  const isReady = document.status === "ready";
-  const conversations = useQuery(
-    api.chatData.listConversationsForDocument,
-    isReady ? { documentId: document._id } : "skip",
-  );
+  const conversations = useQuery(api.chatData.listConversationsForDocument, {
+    documentId: document._id,
+  });
   const [selectedConversation, setSelectedConversation] = useState<
     Id<"conversations"> | "new" | null
   >(null);
@@ -211,7 +207,7 @@ export function ChatPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          {isReady && conversations && conversations.length > 0 && (
+          {conversations && conversations.length > 0 && (
             <ConversationSwitcher
               activeConversationId={activeConversationId}
               conversations={conversations}
@@ -221,17 +217,15 @@ export function ChatPanel({
               selectedConversation={selectedConversation}
             />
           )}
-          {isReady && (
-            <button
-              className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 text-xs font-medium text-stone-300 transition-colors hover:border-amber-400/20 hover:bg-amber-500/[0.07] hover:text-amber-300"
-              onClick={handleNewConversation}
-              title="New conversation"
-              type="button"
-            >
-              <HugeiconsIcon icon={PlusSignIcon} size={12} strokeWidth={2} />
-              <span>New</span>
-            </button>
-          )}
+          <button
+            className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 text-xs font-medium text-stone-300 transition-colors hover:border-amber-400/20 hover:bg-amber-500/[0.07] hover:text-amber-300"
+            onClick={handleNewConversation}
+            title="New conversation"
+            type="button"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={12} strokeWidth={2} />
+            <span>New</span>
+          </button>
         </div>
       </div>
 
@@ -240,7 +234,6 @@ export function ChatPanel({
         conversationId={activeConversationId}
         currentPage={currentPage}
         document={document}
-        isReady={isReady}
         onCitationSelect={onCitationSelect}
         onConversationCreated={setSelectedConversation}
       />
@@ -331,14 +324,12 @@ function ChatBody({
   conversationId,
   currentPage,
   document,
-  isReady,
   onCitationSelect,
   onConversationCreated,
 }: {
   conversationId: Id<"conversations"> | null;
   currentPage?: number;
   document: WorkspaceDocument;
-  isReady: boolean;
   onCitationSelect?: (pageNumber: number) => void;
   onConversationCreated: (id: Id<"conversations">) => void;
 }) {
@@ -390,7 +381,6 @@ function ChatBody({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!isReady) return;
     const question = input.trim();
     if (!question || isGenerating) return;
 
@@ -560,20 +550,14 @@ function ChatBody({
   }
 
   const hasMessages = displayMessages.length > 0;
-  const showSuggestionChips = isReady && !hasMessages && !isGenerating;
+  const showSuggestionChips = !hasMessages && !isGenerating;
 
   return (
     <>
       {/* ── Messages area ──────────────────────────────────────── */}
       <div className="chat-scroll-area min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {!isReady && (
-          <div className="mb-4">
-            <PipelineStepper document={document} />
-          </div>
-        )}
-
         {!hasMessages && !isGenerating ? (
-          <EmptyState isReady={isReady} />
+          <EmptyState />
         ) : (
           <div
             aria-busy={isGenerating}
@@ -673,15 +657,13 @@ function ChatBody({
         <form
           className={cn(
             "relative rounded-xl border transition-colors duration-200",
-            !isReady
-              ? "border-white/[0.05] bg-white/[0.015]"
-              : isFocused
-                ? "border-amber-400/20 bg-white/[0.04] shadow-[0_0_20px_rgba(245,158,11,0.06)]"
-                : "border-white/[0.07] bg-white/[0.025]",
+            isFocused
+              ? "border-amber-400/20 bg-white/[0.04] shadow-[0_0_20px_rgba(245,158,11,0.06)]"
+              : "border-white/[0.07] bg-white/[0.025]",
           )}
           onSubmit={handleSubmit}
         >
-          {currentPage && isReady && (
+          {currentPage && (
             <div className="flex px-4 pt-3 pb-0">
               <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/[0.08] px-2 py-0.5 text-xs font-medium text-amber-400/80">
                 Page {currentPage}
@@ -693,7 +675,7 @@ function ChatBody({
             <textarea
               ref={textareaRef}
               className="max-h-[120px] min-h-[24px] flex-1 resize-none bg-transparent text-base leading-relaxed text-stone-200 outline-none placeholder:text-stone-600 disabled:cursor-not-allowed"
-              disabled={isGenerating || !isReady}
+              disabled={isGenerating}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
@@ -703,47 +685,31 @@ function ChatBody({
                   void handleSubmit(e);
                 }
               }}
-              placeholder={
-                isReady
-                  ? "Ask about this document…"
-                  : "Chat unlocks once processing finishes"
-              }
+              placeholder="Ask about this document…"
               rows={1}
               value={input}
             />
             <button
-              aria-label={isReady ? "Send message" : "Chat locked"}
+              aria-label="Send message"
               className={cn(
                 "focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-150",
-                !isReady
-                  ? "bg-white/[0.04] text-stone-600"
-                  : input.trim() && !isGenerating
-                    ? "bg-amber-500 text-[#070707] shadow-[0_2px_12px_rgba(245,158,11,0.25)] hover:bg-amber-400"
-                    : "bg-white/[0.06] text-stone-600",
+                input.trim() && !isGenerating
+                  ? "bg-amber-500 text-[#070707] shadow-[0_2px_12px_rgba(245,158,11,0.25)] hover:bg-amber-400"
+                  : "bg-white/[0.06] text-stone-600",
               )}
-              disabled={!isReady || !input.trim() || isGenerating}
+              disabled={!input.trim() || isGenerating}
               type="submit"
             >
-              {isReady ? (
-                <HugeiconsIcon icon={ArrowUp01Icon} size={16} strokeWidth={2} />
-              ) : (
-                <HugeiconsIcon icon={LockIcon} size={14} strokeWidth={1.8} />
-              )}
+              <HugeiconsIcon icon={ArrowUp01Icon} size={16} strokeWidth={2} />
             </button>
           </div>
 
           <div className="flex items-center justify-between px-4 pt-0 pb-2.5">
             <span className="text-xs text-stone-600/60">
-              {isReady ? (
-                <>
-                  <kbd className="rounded border border-white/[0.06] bg-white/[0.04] px-1 py-0.5 font-mono text-xs">
-                    ↵
-                  </kbd>{" "}
-                  to send
-                </>
-              ) : (
-                "Indexing in progress — chat will unlock automatically"
-              )}
+              <kbd className="rounded border border-white/[0.06] bg-white/[0.04] px-1 py-0.5 font-mono text-xs">
+                ↵
+              </kbd>{" "}
+              to send
             </span>
           </div>
         </form>
@@ -754,7 +720,7 @@ function ChatBody({
 
 /* ─── Empty state ───────────────────────────────────────────────── */
 
-function EmptyState({ isReady }: { isReady: boolean }) {
+function EmptyState() {
   return (
     <div className="flex h-full flex-col items-center justify-center px-4">
       <motion.div
@@ -771,12 +737,11 @@ function EmptyState({ isReady }: { isReady: boolean }) {
         </div>
 
         <h3 className="text-md font-semibold tracking-tight text-stone-100">
-          {isReady ? "What would you like to know?" : "Almost there"}
+          What would you like to know?
         </h3>
         <p className="mx-auto mt-2 max-w-[260px] text-sm leading-relaxed text-stone-500">
-          {isReady
-            ? "Ask anything about this document. Answers include citations with page references."
-            : "Once processing finishes, you can chat with the document and jump to citations."}
+          Ask anything about this document. Answers include citations with page
+          references.
         </p>
       </motion.div>
     </div>

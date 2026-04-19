@@ -200,23 +200,6 @@
     border-radius: 0.5rem;
   }
 
-  /* Citation-land highlight — pulses on the PDF canvas when a
-     citation is clicked. Apply via `data-pulse="true"` toggle. */
-  @keyframes citationLand {
-    0% {
-      box-shadow: 0 0 0 0 rgb(245 158 11 / 0.45);
-    }
-    50% {
-      box-shadow: 0 0 0 8px rgb(245 158 11 / 0.18);
-    }
-    100% {
-      box-shadow: 0 0 0 0 rgb(245 158 11 / 0);
-    }
-  }
-  [data-citation-pulse="true"] {
-    animation: citationLand 0.9s ease-out;
-  }
-
   /* ── Chat markdown ────────────────────────────────────── */
   .chat-markdown {
     @apply text-[14px] leading-7 text-stone-300;

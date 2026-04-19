@@ -2,8 +2,6 @@
 
 import type { ChangeEvent, DragEvent } from "react";
 import { useCallback, useRef, useState } from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Upload04Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
 
@@ -66,7 +64,7 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
 
       <button
         className={cn(
-          "focus-ring relative flex w-full max-w-lg flex-col items-center rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-colors duration-200",
+          "relative flex w-full max-w-lg flex-col items-center rounded-2xl border-2 border-dashed px-8 py-16 text-center transition-all duration-200",
           isDragging
             ? "border-amber-400/50 bg-amber-500/[0.06]"
             : "border-stone-700/50 bg-stone-900/20 hover:border-stone-600/60 hover:bg-stone-900/30",
@@ -79,16 +77,16 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
       >
         <div
           className={cn(
-            "mb-5 flex h-14 w-14 items-center justify-center rounded-2xl transition-colors",
+            "mb-6 flex h-14 w-14 items-center justify-center rounded-2xl transition-colors",
             isDragging
               ? "bg-amber-500/15 text-amber-400"
               : "bg-stone-800/60 text-stone-500",
           )}
         >
-          <HugeiconsIcon icon={Upload04Icon} size={26} strokeWidth={1.6} />
+          <UploadCloudIcon />
         </div>
 
-        <h2 className="text-lg font-semibold text-stone-200">
+        <h2 className="text-xl font-semibold text-stone-200">
           {isDragging ? "Drop your PDF here" : "Drop a PDF to get started"}
         </h2>
 
@@ -101,5 +99,23 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
         </p>
       </button>
     </div>
+  );
+}
+
+function UploadCloudIcon() {
+  return (
+    <svg
+      className="h-7 w-7"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 13v8" />
+      <path d="m8 17 4-4 4 4" />
+      <path d="M20 16.7A4.5 4.5 0 0 0 17.5 8h-1.1A7 7 0 1 0 4 14.9" />
+    </svg>
   );
 }

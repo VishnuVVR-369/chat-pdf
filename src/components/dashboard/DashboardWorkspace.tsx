@@ -11,6 +11,7 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ChatPanel } from "./ChatPanel";
 import { PdfViewer } from "./PdfViewer";
+import { PipelineStepper } from "./PipelineStepper";
 import { Sidebar } from "./Sidebar";
 import type { WorkspaceDocument } from "./Sidebar";
 import { UploadDropZone } from "./UploadDropZone";
@@ -338,59 +339,71 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
               {/* Desktop split */}
               <div className="hidden min-h-0 flex-1 lg:flex">
                 <div className="surface-base min-w-0 flex-1 border-r border-stone-800/60">
-                  <CitationPulseWrapper page={currentPage}>
-                    <PdfViewer
-                      key={selectedDocument._id}
-                      document={selectedDocument}
-                      localFile={
-                        selectedDocumentPreviewUrl
-                          ? null
-                          : selectedDocumentLocalFile
-                      }
-                      onPageCountChange={setPageCount}
-                      onPageChange={setCurrentPage}
-                      pageCount={pageCount}
-                      pageNumber={currentPage}
-                      resolvedFileUrl={selectedDocumentPreviewUrl}
-                    />
-                  </CitationPulseWrapper>
-                </div>
-                <div className="w-[420px] min-w-0 shrink-0 xl:w-[480px] 2xl:w-[520px]">
-                  <ChatPanel
+                  <PdfViewer
                     key={selectedDocument._id}
                     document={selectedDocument}
-                    currentPage={currentPage}
-                    onCitationSelect={setCurrentPage}
+                    localFile={
+                      selectedDocumentPreviewUrl
+                        ? null
+                        : selectedDocumentLocalFile
+                    }
+                    onPageCountChange={setPageCount}
+                    onPageChange={setCurrentPage}
+                    pageCount={pageCount}
+                    pageNumber={currentPage}
+                    resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
+                </div>
+                <div className="w-[420px] min-w-0 shrink-0 xl:w-[480px] 2xl:w-[520px]">
+                  {selectedDocument.status === "ready" ? (
+                    <ChatPanel
+                      key={selectedDocument._id}
+                      document={selectedDocument}
+                      currentPage={currentPage}
+                      onCitationSelect={setCurrentPage}
+                    />
+                  ) : (
+                    <PipelineStepper
+                      key={selectedDocument._id}
+                      document={selectedDocument}
+                    />
+                  )}
                 </div>
               </div>
 
               {/* Mobile single-pane (tab-switched) */}
               <div className="flex min-h-0 flex-1 flex-col lg:hidden">
                 {mobileTab === "pdf" ? (
-                  <CitationPulseWrapper page={currentPage}>
-                    <PdfViewer
-                      key={`mobile-pdf-${selectedDocument._id}`}
-                      document={selectedDocument}
-                      localFile={
-                        selectedDocumentPreviewUrl
-                          ? null
-                          : selectedDocumentLocalFile
-                      }
-                      onPageCountChange={setPageCount}
-                      onPageChange={setCurrentPage}
-                      pageCount={pageCount}
-                      pageNumber={currentPage}
-                      resolvedFileUrl={selectedDocumentPreviewUrl}
-                    />
-                  </CitationPulseWrapper>
-                ) : (
-                  <ChatPanel
-                    key={`mobile-chat-${selectedDocument._id}`}
+                  <PdfViewer
+                    key={`mobile-pdf-${selectedDocument._id}`}
                     document={selectedDocument}
-                    currentPage={currentPage}
-                    onCitationSelect={handleCitationSelect}
+                    localFile={
+                      selectedDocumentPreviewUrl
+                        ? null
+                        : selectedDocumentLocalFile
+                    }
+                    onPageCountChange={setPageCount}
+                    onPageChange={setCurrentPage}
+                    pageCount={pageCount}
+                    pageNumber={currentPage}
+                    resolvedFileUrl={selectedDocumentPreviewUrl}
                   />
+                ) : (
+                  <>
+                    {selectedDocument.status === "ready" ? (
+                      <ChatPanel
+                        key={`mobile-chat-${selectedDocument._id}`}
+                        document={selectedDocument}
+                        currentPage={currentPage}
+                        onCitationSelect={handleCitationSelect}
+                      />
+                    ) : (
+                      <PipelineStepper
+                        key={`mobile-chat-${selectedDocument._id}`}
+                        document={selectedDocument}
+                      />
+                    )}
+                  </>
                 )}
               </div>
             </>
@@ -438,25 +451,6 @@ function MobileTabSwitcher({
           {tab.toUpperCase()}
         </button>
       ))}
-    </div>
-  );
-}
-
-// Re-keys on every page change so the citation-land CSS animation re-runs.
-function CitationPulseWrapper({
-  children,
-  page,
-}: {
-  children: React.ReactNode;
-  page: number;
-}) {
-  return (
-    <div
-      key={page}
-      data-citation-pulse="true"
-      className="h-full min-h-0 rounded-none"
-    >
-      {children}
     </div>
   );
 }

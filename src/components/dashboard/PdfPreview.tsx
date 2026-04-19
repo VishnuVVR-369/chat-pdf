@@ -55,20 +55,6 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchPdfBytes(url: string, signal: AbortSignal) {
-  const response = await fetch(url, { signal });
-
-  if (!response.ok) {
-    const error = new Error(
-      `Could not load this PDF (${response.status} ${response.statusText}).`,
-    ) as Error & { status?: number };
-    error.status = response.status;
-    throw error;
-  }
-
-  return new Uint8Array(await response.arrayBuffer());
-}
-
 export function PdfPreview({
   file,
   onPageCountChange,
@@ -124,7 +110,6 @@ export function PdfPreview({
 
     let cancelled = false;
     let loadingTask: ReturnType<typeof getDocument> | null = null;
-    const abortController = new AbortController();
 
     async function loadDocument() {
       setPdfDocument(null);
@@ -132,17 +117,15 @@ export function PdfPreview({
       setIsLoadingDocument(true);
       setError(null);
 
+      const source = file
+        ? { data: new Uint8Array(await file.arrayBuffer()) }
+        : { url: url ?? undefined };
+
       try {
         let attempt = 0;
 
         while (!cancelled) {
           try {
-            const source = {
-              data: file
-                ? new Uint8Array(await file.arrayBuffer())
-                : await fetchPdfBytes(url ?? "", abortController.signal),
-            };
-
             loadingTask = getDocument({
               ...source,
               isEvalSupported: false,
@@ -191,7 +174,6 @@ export function PdfPreview({
 
     return () => {
       cancelled = true;
-      abortController.abort();
       if (loadingTask) {
         void loadingTask.destroy();
       }
@@ -288,7 +270,7 @@ export function PdfPreview({
     };
   }, [containerSize.height, containerSize.width, pageNumber, pdfDocument]);
 
-  const showLoadingOverlay = isLoadingDocument || isRenderingPage;
+  const isRendering = isLoadingDocument || isRenderingPage;
 
   if (error) {
     return (
@@ -309,7 +291,7 @@ export function PdfPreview({
       className="relative h-full overflow-hidden bg-[#090909]"
     >
       <div className="relative flex h-full items-center justify-center overflow-hidden bg-stone-950/90 p-6">
-        {showLoadingOverlay ? (
+        {isRendering ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090909]/75 backdrop-blur-sm">
             <div className="inline-flex items-center gap-3 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 text-sm text-amber-300">
               <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-stone-600 border-t-amber-400" />
