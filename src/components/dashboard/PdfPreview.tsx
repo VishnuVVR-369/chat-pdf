@@ -18,14 +18,6 @@ const PREVIEW_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000];
 
 let workerConfigured = false;
 
-type CachedPageRender = {
-  canvas: HTMLCanvasElement;
-  height: number;
-  styleHeight: string;
-  styleWidth: string;
-  width: number;
-};
-
 function ensurePdfWorkerConfigured() {
   if (workerConfigured || typeof window === "undefined") {
     return;
@@ -77,26 +69,6 @@ async function fetchPdfBytes(url: string, signal: AbortSignal) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-function drawCachedPage(
-  canvas: HTMLCanvasElement,
-  cachedPage: CachedPageRender,
-) {
-  const context = canvas.getContext("2d");
-
-  if (!context) {
-    throw new Error("Canvas rendering is not available in this browser.");
-  }
-
-  canvas.width = cachedPage.width;
-  canvas.height = cachedPage.height;
-  canvas.style.width = cachedPage.styleWidth;
-  canvas.style.height = cachedPage.styleHeight;
-
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.clearRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(cachedPage.canvas, 0, 0);
-}
-
 export function PdfPreview({
   file,
   onPageCountChange,
@@ -106,12 +78,10 @@ export function PdfPreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageCountChangeRef = useRef(onPageCountChange);
-  const pageRenderCacheRef = useRef(new Map<string, CachedPageRender>());
   const [error, setError] = useState<string | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [isRenderingPage, setIsRenderingPage] = useState(false);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
-  const [hasRenderedPage, setHasRenderedPage] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -144,10 +114,8 @@ export function PdfPreview({
 
   useEffect(() => {
     if (!file && !url) {
-      pageRenderCacheRef.current.clear();
       setPdfDocument(null);
       setError(null);
-      setHasRenderedPage(false);
       setIsLoadingDocument(false);
       return;
     }
@@ -159,9 +127,7 @@ export function PdfPreview({
     const abortController = new AbortController();
 
     async function loadDocument() {
-      pageRenderCacheRef.current.clear();
       setPdfDocument(null);
-      setHasRenderedPage(false);
       setIsRenderingPage(false);
       setIsLoadingDocument(true);
       setError(null);
@@ -243,6 +209,7 @@ export function PdfPreview({
     let renderTask: RenderTask | null = null;
 
     async function renderPage() {
+      setIsRenderingPage(true);
       setError(null);
 
       try {
@@ -283,63 +250,25 @@ export function PdfPreview({
           0.25,
         );
         const viewport = pdfPage.getViewport({ scale });
-        const devicePixelRatio = window.devicePixelRatio || 1;
-        const outputWidth = Math.floor(viewport.width * devicePixelRatio);
-        const outputHeight = Math.floor(viewport.height * devicePixelRatio);
-        const cacheKey = [
-          safePageNumber,
-          outputWidth,
-          outputHeight,
-          devicePixelRatio,
-        ].join(":");
-        const cachedPage = pageRenderCacheRef.current.get(cacheKey);
+        const context = canvas.getContext("2d");
 
-        if (cachedPage) {
-          drawCachedPage(canvas, cachedPage);
-          setHasRenderedPage(true);
-          return;
-        }
-
-        setIsRenderingPage(true);
-        const renderCanvas = document.createElement("canvas");
-        const renderContext = renderCanvas.getContext("2d");
-
-        if (!renderContext) {
+        if (!context) {
           throw new Error("Canvas rendering is not available in this browser.");
         }
 
-        renderCanvas.width = outputWidth;
-        renderCanvas.height = outputHeight;
-        renderContext.setTransform(
-          devicePixelRatio,
-          0,
-          0,
-          devicePixelRatio,
-          0,
-          0,
-        );
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * devicePixelRatio);
+        canvas.height = Math.floor(viewport.height * devicePixelRatio);
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+
+        context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
         renderTask = pdfPage.render({
-          canvas: renderCanvas,
-          canvasContext: renderContext,
+          canvas,
+          canvasContext: context,
           viewport,
         });
         await renderTask.promise;
-
-        if (cancelled) {
-          return;
-        }
-
-        const nextCachedPage = {
-          canvas: renderCanvas,
-          height: outputHeight,
-          styleHeight: `${viewport.height}px`,
-          styleWidth: `${viewport.width}px`,
-          width: outputWidth,
-        };
-
-        pageRenderCacheRef.current.set(cacheKey, nextCachedPage);
-        drawCachedPage(canvas, nextCachedPage);
-        setHasRenderedPage(true);
       } catch (renderError) {
         if (!cancelled) {
           setError(getPdfLoadErrorMessage(renderError));
@@ -359,8 +288,7 @@ export function PdfPreview({
     };
   }, [containerSize.height, containerSize.width, pageNumber, pdfDocument]);
 
-  const showLoadingOverlay =
-    isLoadingDocument || (!hasRenderedPage && isRenderingPage);
+  const showLoadingOverlay = isLoadingDocument || isRenderingPage;
 
   if (error) {
     return (

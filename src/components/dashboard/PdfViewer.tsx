@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowLeft01Icon,
@@ -84,35 +84,6 @@ export function PdfViewer({
   };
 
   const downloadUrl = resolvedFileUrl ?? doc.fileUrl;
-
-  // J / K keyboard shortcuts for paging — only when not typing.
-  useEffect(() => {
-    if (!pageCount) return;
-
-    function isTypingTarget(target: EventTarget | null) {
-      if (!(target instanceof HTMLElement)) return false;
-      if (target.isContentEditable) return true;
-      const tag = target.tagName;
-      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
-    }
-
-    function handler(event: KeyboardEvent) {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isTypingTarget(event.target)) return;
-
-      if (event.key === "j" || event.key === "ArrowRight") {
-        event.preventDefault();
-        handleSetPage(Math.min(pageCount ?? pageNumber, pageNumber + 1));
-      } else if (event.key === "k" || event.key === "ArrowLeft") {
-        event.preventDefault();
-        handleSetPage(Math.max(1, pageNumber - 1));
-      }
-    }
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pageCount, pageNumber]);
 
   return (
     <div className="flex h-full flex-col">
