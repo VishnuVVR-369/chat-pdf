@@ -18,6 +18,14 @@ const PREVIEW_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000];
 
 let workerConfigured = false;
 
+type CachedPageRender = {
+  canvas: HTMLCanvasElement;
+  height: number;
+  styleHeight: string;
+  styleWidth: string;
+  width: number;
+};
+
 function ensurePdfWorkerConfigured() {
   if (workerConfigured || typeof window === "undefined") {
     return;
@@ -55,6 +63,40 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchPdfBytes(url: string, signal: AbortSignal) {
+  const response = await fetch(url, { signal });
+
+  if (!response.ok) {
+    const error = new Error(
+      `Could not load this PDF (${response.status} ${response.statusText}).`,
+    ) as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
+
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+function drawCachedPage(
+  canvas: HTMLCanvasElement,
+  cachedPage: CachedPageRender,
+) {
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("Canvas rendering is not available in this browser.");
+  }
+
+  canvas.width = cachedPage.width;
+  canvas.height = cachedPage.height;
+  canvas.style.width = cachedPage.styleWidth;
+  canvas.style.height = cachedPage.styleHeight;
+
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(cachedPage.canvas, 0, 0);
+}
+
 export function PdfPreview({
   file,
   onPageCountChange,
@@ -64,10 +106,12 @@ export function PdfPreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageCountChangeRef = useRef(onPageCountChange);
+  const pageRenderCacheRef = useRef(new Map<string, CachedPageRender>());
   const [error, setError] = useState<string | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [isRenderingPage, setIsRenderingPage] = useState(false);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const [hasRenderedPage, setHasRenderedPage] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -100,8 +144,10 @@ export function PdfPreview({
 
   useEffect(() => {
     if (!file && !url) {
+      pageRenderCacheRef.current.clear();
       setPdfDocument(null);
       setError(null);
+      setHasRenderedPage(false);
       setIsLoadingDocument(false);
       return;
     }
@@ -110,22 +156,27 @@ export function PdfPreview({
 
     let cancelled = false;
     let loadingTask: ReturnType<typeof getDocument> | null = null;
+    const abortController = new AbortController();
 
     async function loadDocument() {
+      pageRenderCacheRef.current.clear();
       setPdfDocument(null);
+      setHasRenderedPage(false);
       setIsRenderingPage(false);
       setIsLoadingDocument(true);
       setError(null);
-
-      const source = file
-        ? { data: new Uint8Array(await file.arrayBuffer()) }
-        : { url: url ?? undefined };
 
       try {
         let attempt = 0;
 
         while (!cancelled) {
           try {
+            const source = {
+              data: file
+                ? new Uint8Array(await file.arrayBuffer())
+                : await fetchPdfBytes(url ?? "", abortController.signal),
+            };
+
             loadingTask = getDocument({
               ...source,
               isEvalSupported: false,
@@ -174,6 +225,7 @@ export function PdfPreview({
 
     return () => {
       cancelled = true;
+      abortController.abort();
       if (loadingTask) {
         void loadingTask.destroy();
       }
@@ -191,7 +243,6 @@ export function PdfPreview({
     let renderTask: RenderTask | null = null;
 
     async function renderPage() {
-      setIsRenderingPage(true);
       setError(null);
 
       try {
@@ -232,25 +283,63 @@ export function PdfPreview({
           0.25,
         );
         const viewport = pdfPage.getViewport({ scale });
-        const context = canvas.getContext("2d");
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        const outputWidth = Math.floor(viewport.width * devicePixelRatio);
+        const outputHeight = Math.floor(viewport.height * devicePixelRatio);
+        const cacheKey = [
+          safePageNumber,
+          outputWidth,
+          outputHeight,
+          devicePixelRatio,
+        ].join(":");
+        const cachedPage = pageRenderCacheRef.current.get(cacheKey);
 
-        if (!context) {
+        if (cachedPage) {
+          drawCachedPage(canvas, cachedPage);
+          setHasRenderedPage(true);
+          return;
+        }
+
+        setIsRenderingPage(true);
+        const renderCanvas = document.createElement("canvas");
+        const renderContext = renderCanvas.getContext("2d");
+
+        if (!renderContext) {
           throw new Error("Canvas rendering is not available in this browser.");
         }
 
-        const devicePixelRatio = window.devicePixelRatio || 1;
-        canvas.width = Math.floor(viewport.width * devicePixelRatio);
-        canvas.height = Math.floor(viewport.height * devicePixelRatio);
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
-
-        context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+        renderCanvas.width = outputWidth;
+        renderCanvas.height = outputHeight;
+        renderContext.setTransform(
+          devicePixelRatio,
+          0,
+          0,
+          devicePixelRatio,
+          0,
+          0,
+        );
         renderTask = pdfPage.render({
-          canvas,
-          canvasContext: context,
+          canvas: renderCanvas,
+          canvasContext: renderContext,
           viewport,
         });
         await renderTask.promise;
+
+        if (cancelled) {
+          return;
+        }
+
+        const nextCachedPage = {
+          canvas: renderCanvas,
+          height: outputHeight,
+          styleHeight: `${viewport.height}px`,
+          styleWidth: `${viewport.width}px`,
+          width: outputWidth,
+        };
+
+        pageRenderCacheRef.current.set(cacheKey, nextCachedPage);
+        drawCachedPage(canvas, nextCachedPage);
+        setHasRenderedPage(true);
       } catch (renderError) {
         if (!cancelled) {
           setError(getPdfLoadErrorMessage(renderError));
@@ -270,7 +359,8 @@ export function PdfPreview({
     };
   }, [containerSize.height, containerSize.width, pageNumber, pdfDocument]);
 
-  const isRendering = isLoadingDocument || isRenderingPage;
+  const showLoadingOverlay =
+    isLoadingDocument || (!hasRenderedPage && isRenderingPage);
 
   if (error) {
     return (
@@ -291,7 +381,7 @@ export function PdfPreview({
       className="relative h-full overflow-hidden bg-[#090909]"
     >
       <div className="relative flex h-full items-center justify-center overflow-hidden bg-stone-950/90 p-6">
-        {isRendering ? (
+        {showLoadingOverlay ? (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#090909]/75 backdrop-blur-sm">
             <div className="inline-flex items-center gap-3 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 text-sm text-amber-300">
               <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-stone-600 border-t-amber-400" />
