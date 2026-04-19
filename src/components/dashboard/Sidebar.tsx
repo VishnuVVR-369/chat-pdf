@@ -177,7 +177,11 @@ export function Sidebar({
               title="Expand sidebar"
               type="button"
             >
-              <BrandLogo priority textClassName="hidden" logoClassName="h-7 w-7" />
+              <BrandLogo
+                priority
+                textClassName="hidden"
+                logoClassName="h-7 w-7"
+              />
             </button>
           ) : (
             <>
@@ -193,7 +197,11 @@ export function Sidebar({
                 onClick={() => onCollapsedChange(true)}
                 type="button"
               >
-                <HugeiconsIcon icon={SidebarLeftIcon} size={16} strokeWidth={1.8} />
+                <HugeiconsIcon
+                  icon={SidebarLeftIcon}
+                  size={16}
+                  strokeWidth={1.8}
+                />
               </button>
             </>
           )}
