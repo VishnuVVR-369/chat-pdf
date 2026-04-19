@@ -49,6 +49,19 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Type scale — tightened for dense product UI.
+     Five sizes only; do not use `text-[Npx]` in components. */
+  --text-xs: 0.6875rem; /* 11px — eyebrows, status, meta */
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem; /* 13px — list items, secondary body */
+  --text-sm--line-height: 1.125rem;
+  --text-base: 0.875rem; /* 14px — chat body, primary text */
+  --text-base--line-height: 1.5rem;
+  --text-md: 1rem; /* 16px — section titles, emphasis */
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.125rem; /* 18px — page titles */
+  --text-lg--line-height: 1.625rem;
 }
 
 :root {
@@ -133,6 +146,77 @@
 }
 
 @layer components {
+  /* ── Dashboard surface tokens ─────────────────────────── */
+  .surface-base {
+    background-color: #070707;
+  }
+
+  .surface-raised {
+    background-color: oklch(0.16 0 0 / 0.6);
+    border: 1px solid rgb(255 255 255 / 0.06);
+  }
+
+  .surface-muted {
+    background-color: rgb(255 255 255 / 0.03);
+    border: 1px solid rgb(255 255 255 / 0.05);
+  }
+
+  .surface-accent {
+    background-color: rgb(245 158 11 / 0.1);
+    border: 1px solid rgb(245 158 11 / 0.2);
+    color: rgb(252 211 77);
+  }
+  .surface-accent:hover {
+    background-color: rgb(245 158 11 / 0.15);
+    border-color: rgb(245 158 11 / 0.3);
+    color: rgb(254 215 170);
+  }
+
+  /* Single focus-ring used across buttons, inputs, tabs, pills.
+     Applied on top of any custom outline styling. */
+  .focus-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(245 158 11 / 0.4);
+  }
+
+  /* Skeleton shimmer — used for loading states in the workspace. */
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.03) 0%,
+      rgb(255 255 255 / 0.06) 50%,
+      rgb(255 255 255 / 0.03) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
+
+  /* Citation-land highlight — pulses on the PDF canvas when a
+     citation is clicked. Apply via `data-pulse="true"` toggle. */
+  @keyframes citationLand {
+    0% {
+      box-shadow: 0 0 0 0 rgb(245 158 11 / 0.45);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgb(245 158 11 / 0.18);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgb(245 158 11 / 0);
+    }
+  }
+  [data-citation-pulse="true"] {
+    animation: citationLand 0.9s ease-out;
+  }
+
   /* ── Chat markdown ────────────────────────────────────── */
   .chat-markdown {
     @apply text-[14px] leading-7 text-stone-300;
