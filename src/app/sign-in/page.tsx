@@ -1,17 +1,9 @@
-import { redirect } from "next/navigation";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
-import { isAuthenticated } from "@/lib/auth-server";
 
-export default async function SignInPage() {
-  if (await isAuthenticated()) {
-    redirect("/dashboard");
-  }
-
+export default function SignInPage() {
   return (
     <AuthPageShell
-      alternateHref="/sign-up"
-      alternateLabel="Create an account"
       badge="Welcome back"
       description="Sign in with Google or GitHub and return straight to your document workspace, saved context, and citation-backed answers."
       highlights={[
@@ -41,7 +33,7 @@ export default async function SignInPage() {
         </>
       }
     >
-      <AuthCard mode="sign-in" />
+      <AuthCard />
     </AuthPageShell>
   );
 }

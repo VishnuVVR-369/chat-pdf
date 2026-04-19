@@ -1,46 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
 
-type AuthMode = "sign-in" | "sign-up";
 type Provider = "google" | "github";
 
-const copy = {
-  "sign-in": {
-    badge: "Welcome back",
-    title: "Sign in to your workspace.",
-    description:
-      "Continue with Google or GitHub to pick up right where you left off.",
-    primaryLabel: "Sign in with",
-    alternateLabel: "Don't have an account?",
-    alternateHref: "/sign-up",
-    alternateCta: "Create one",
-    helper: "Two providers. No password reset flow.",
-  },
-  "sign-up": {
-    badge: "Get started",
-    title: "Create your account.",
-    description:
-      "One click with Google or GitHub and you're in — no forms, no password.",
-    primaryLabel: "Continue with",
-    alternateLabel: "Already have an account?",
-    alternateHref: "/sign-in",
-    alternateCta: "Sign in",
-    helper: "Fast onboarding with Google or GitHub.",
-  },
-} as const;
-
-export function AuthCard({ mode }: { mode: AuthMode }) {
+export function AuthCard() {
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
-
-  const content = copy[mode];
 
   const handleSocialAuth = async (provider: Provider) => {
     setPendingProvider(provider);
@@ -51,7 +22,7 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
         provider,
         callbackURL: "/dashboard",
         newUserCallbackURL: "/dashboard",
-        requestSignUp: mode === "sign-up",
+        requestSignUp: true,
       });
 
       if (result.error) {
@@ -83,14 +54,15 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
         <div className="space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-3 py-1 text-xs font-medium text-amber-400">
             <span className="h-1 w-1 rounded-full bg-amber-400" />
-            {content.badge}
+            Welcome back
           </div>
           <div className="space-y-2">
             <h1 className="text-2xl font-bold tracking-tight text-stone-100">
-              {content.title}
+              Sign in to your workspace.
             </h1>
             <p className="text-sm leading-relaxed text-stone-500">
-              {content.description}
+              Continue with Google or GitHub to pick up right where you left
+              off.
             </p>
           </div>
         </div>
@@ -98,14 +70,14 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
         <div className="space-y-3">
           <SocialButton
             disabled={pendingProvider !== null}
-            label={`${content.primaryLabel} Google`}
+            label="Sign in with Google"
             onClick={() => handleSocialAuth("google")}
             provider="google"
             pending={pendingProvider === "google"}
           />
           <SocialButton
             disabled={pendingProvider !== null}
-            label={`${content.primaryLabel} GitHub`}
+            label="Sign in with GitHub"
             onClick={() => handleSocialAuth("github")}
             provider="github"
             pending={pendingProvider === "github"}
@@ -138,18 +110,6 @@ export function AuthCard({ mode }: { mode: AuthMode }) {
             <p className="mt-1 text-[11px] leading-relaxed text-stone-600">
               You land directly in the dashboard after auth completes.
             </p>
-          </div>
-        </div>
-
-        <div className="border-t border-stone-800/60 pt-5">
-          <div className="flex flex-wrap items-center gap-1.5 text-sm text-stone-500">
-            <span>{content.alternateLabel}</span>
-            <Link
-              className="font-semibold text-amber-400 underline decoration-amber-500/30 underline-offset-4 transition hover:decoration-amber-400"
-              href={content.alternateHref}
-            >
-              {content.alternateCta}
-            </Link>
           </div>
         </div>
 
