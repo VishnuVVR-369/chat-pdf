@@ -1,0 +1,117 @@
+/**
+ * Mermaid diagram definitions for the docs.
+ *
+ * These are grounded in the real backend:
+ * - convex/documentProcessing.ts  (ingestion: always-OCR, chunking, embeddings)
+ * - convex/chatHelpers.ts          (routing, hybrid retrieval, RRF, citations)
+ * - convex/chatStream.ts           (SSE streaming chat HTTP action)
+ * - convex/schema.ts               (data model + vector/text indexes)
+ */
+
+const OK_NODE =
+  "classDef okNode fill:#0e1f15,stroke:#34d399,color:#d1fae5;";
+const BAD_NODE =
+  "classDef badNode fill:#23100f,stroke:#f87171,color:#fecaca;";
+
+export const ingestionPipelineDiagram = `flowchart TB
+  U(["PDF uploaded"]) --> S["Stored in Cloud Storage<br/>+ document record created"]
+  S --> O["Google Document AI<br/>batch OCR · every PDF · ≤ 100 pages"]
+  O --> X["Extract page text<br/>from OCR output"]
+  X --> C["Chunk text<br/>~450 words · 75 overlap<br/>page spans kept for citations"]
+  C --> E["Embed chunks<br/>text-embedding-3-small · 1536-dim"]
+  X --> P["Per-page summaries<br/>LLM"]
+  P --> D["Document summary<br/>LLM"]
+  E --> R(["Ready for chat"])
+  D --> R
+  O -. "transient error" .-> RT{"Retry?<br/>≤ 3 attempts"}
+  RT -. "yes · 15s / 60s backoff" .-> O
+  RT -. "no" .-> F(["Failed"])
+  class R okNode
+  class F badNode
+  ${OK_NODE}
+  ${BAD_NODE}`;
+
+export const retrievalFlowDiagram = `flowchart TB
+  Q(["User question"]) --> RT["LLM query routing<br/>standalone query + mode"]
+  RT -->|"summaries mode"| SUM["Document + page summaries"]
+  RT -->|"chunks mode"| EMB["Embed query"]
+  RT -->|"chunks mode"| L
+  subgraph HY["Hybrid retrieval"]
+    direction LR
+    V["Vector search<br/>chunk embeddings · top 12"]
+    L["Full-text search<br/>keyword terms · top 12"]
+  end
+  EMB --> V
+  V --> RF["Reciprocal Rank Fusion<br/>vector 0.65 · lexical 0.35 · k = 60"]
+  L --> RF
+  RF --> TOP["Top 6 chunks"]
+  TOP --> GEN["LLM answer<br/>structured JSON · streamed over SSE"]
+  SUM --> GEN
+  GEN --> CV["Citation validation<br/>verbatim quote · page-resolved · ≤ 4"]
+  CV --> A(["Grounded, cited answer"])
+  class A okNode
+  ${OK_NODE}`;
+
+export const systemArchitectureDiagram = `flowchart LR
+  subgraph client["Browser"]
+    NX["Next.js App Router<br/>landing · docs · dashboard"]
+  end
+  subgraph backend["Convex backend"]
+    FN["Queries · mutations · actions"]
+    HTTP["HTTP action<br/>SSE chat stream"]
+    DB[("Database<br/>vector + text search indexes")]
+    JOB["Scheduler<br/>OCR jobs · retries"]
+  end
+  NX <-->|"reactive queries"| FN
+  NX <-->|"POST · stream"| HTTP
+  FN --> DB
+  HTTP --> DB
+  JOB --> DB
+  BA["Better Auth<br/>Google · GitHub"] --- NX
+  BA --- FN
+  JOB --> DAI["Google Document AI"]
+  JOB --> GCS["Cloud Storage"]
+  FN --> OAI["OpenAI<br/>embeddings · chat"]
+  HTTP --> OAI
+  NX -. "events" .-> PH["PostHog"]`;
+
+export const chatSequenceDiagram = `sequenceDiagram
+  autonumber
+  participant UI as Dashboard
+  participant CV as Convex HTTP action
+  participant DB as Convex DB
+  participant AI as OpenAI
+  UI->>CV: POST question + auth token
+  CV->>CV: verify identity · document ready
+  CV->>AI: route query → mode + standalone query
+  alt chunks mode
+    CV->>AI: embed query
+    CV->>DB: vector + full-text search
+    DB-->>CV: candidate chunks
+    CV->>CV: rank fusion → top 6
+  else summaries mode
+    CV->>DB: load document + page summaries
+  end
+  CV->>AI: stream structured answer
+  AI-->>CV: token deltas
+  CV-->>UI: SSE tokens (live)
+  CV->>DB: save message + validated citations
+  CV-->>UI: done + citations`;
+
+export const authBoundariesDiagram = `flowchart TB
+  V(["Visitor"]) --> Q{"Authenticated session?"}
+  Q -->|"no"| PUB["Public<br/>landing · docs · sign-in"]
+  Q -->|"yes"| PROT["Protected<br/>dashboard · documents · chat"]
+  PUB -. "sign in · Google / GitHub" .-> BA["Better Auth"]
+  BA --> ID["Convex identity<br/>tokenIdentifier"]
+  ID --> PROT
+  PROT --> CHK["Server-side checks<br/>ownerTokenIdentifier on every read"]
+  class PROT okNode
+  ${OK_NODE}`;
+
+export const dataModelDiagram = `erDiagram
+  documents ||--o{ documentPages : "1 per page"
+  documents ||--o{ documentChunks : "many"
+  documents ||--o{ conversations : "many"
+  conversations ||--o{ messages : "many"
+  documentChunks ||..o{ messages : "cited by"`;

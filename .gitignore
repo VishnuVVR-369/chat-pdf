@@ -48,4 +48,6 @@ docs/
 !src/app/docs/**
 !src/components/docs/
 !src/components/docs/**
+!src/lib/docs/
+!src/lib/docs/**
 scripts/
