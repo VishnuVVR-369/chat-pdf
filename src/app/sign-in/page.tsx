@@ -1,39 +1,20 @@
 import { AuthCard } from "@/components/auth/AuthCard";
-import { AuthPageShell } from "@/components/auth/AuthPageShell";
 
 export default function SignInPage() {
   return (
-    <AuthPageShell
-      badge="Welcome back"
-      description="Sign in with Google or GitHub and return straight to your document workspace, saved context, and citation-backed answers."
-      highlights={[
-        {
-          title: "Resume instantly",
-          description:
-            "Pick up your document analysis without another setup step.",
-        },
-        {
-          title: "Secure access",
-          description: "OAuth keeps authentication simple and password-free.",
-        },
-        {
-          title: "Same workspace",
-          description:
-            "Your uploads, chats, and citations are ready when you are.",
-        },
-      ]}
-      kicker="Sign in"
-      title={
-        <>
-          Welcome back to your{" "}
-          <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">
-            workspace
-          </span>
-          .
-        </>
-      }
-    >
-      <AuthCard />
-    </AuthPageShell>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#070707] px-6 text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.035]"
+        style={{
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23ffffff' fillOpacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+        }}
+      />
+      <div className="pointer-events-none absolute top-[-160px] left-1/2 h-[560px] w-[860px] -translate-x-1/2 rounded-full bg-amber-500/[0.05] blur-[140px]" />
+
+      <div className="relative flex w-full justify-center">
+        <AuthCard />
+      </div>
+    </main>
   );
 }

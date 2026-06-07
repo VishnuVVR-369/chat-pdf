@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { authClient } from "@/lib/auth-client";
@@ -41,43 +42,31 @@ export function AuthCard() {
 
   return (
     <motion.div
-      className="relative w-full max-w-md overflow-hidden rounded-2xl border border-stone-800/80 bg-[#0c0c0c]/95 p-6 shadow-[0_35px_100px_-24px_rgba(0,0,0,0.75)] backdrop-blur-md sm:rounded-[2rem] sm:p-8"
+      className="relative w-full max-w-sm overflow-hidden rounded-[2rem] border border-stone-800/80 bg-[#0c0c0c]/95 p-8 shadow-[0_35px_100px_-24px_rgba(0,0,0,0.75)] backdrop-blur-md"
       initial={shouldReduceMotion ? false : { opacity: 0, y: 18 }}
       animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
       transition={{ duration: 0.55, ease: "easeOut" }}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(245,158,11,0.08),transparent_38%)]" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/60 to-transparent" />
-      <div className="absolute top-6 right-6 h-24 w-24 rounded-full bg-amber-500/[0.06] blur-3xl" />
 
-      <div className="relative space-y-6">
-        <div className="space-y-3">
-          <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-3 py-1 text-xs font-medium text-amber-400">
-            <span className="h-1 w-1 rounded-full bg-amber-400" />
-            Welcome back
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold tracking-tight text-stone-100">
-              Sign in to your workspace.
-            </h1>
-            <p className="text-sm leading-relaxed text-stone-500">
-              Continue with Google or GitHub to pick up right where you left
-              off.
-            </p>
-          </div>
-        </div>
+      <div className="relative flex flex-col items-center text-center">
+        <BrandLogo priority />
+        <h1 className="mt-6 text-2xl font-bold tracking-tight text-stone-100">
+          Welcome back
+        </h1>
 
-        <div className="space-y-3">
+        <div className="mt-8 w-full space-y-3">
           <SocialButton
             disabled={pendingProvider !== null}
-            label="Sign in with Google"
+            label="Continue with Google"
             onClick={() => handleSocialAuth("google")}
             provider="google"
             pending={pendingProvider === "google"}
           />
           <SocialButton
             disabled={pendingProvider !== null}
-            label="Sign in with GitHub"
+            label="Continue with GitHub"
             onClick={() => handleSocialAuth("github")}
             provider="github"
             pending={pendingProvider === "github"}
@@ -85,37 +74,10 @@ export function AuthCard() {
         </div>
 
         {error ? (
-          <p className="rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-400">
+          <p className="mt-4 w-full rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-400">
             {error}
           </p>
         ) : null}
-
-        <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-stone-800/80" />
-          <span className="text-[11px] tracking-[0.18em] text-stone-600 uppercase">
-            Trusted access
-          </span>
-          <div className="h-px flex-1 bg-stone-800/80" />
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-stone-800/75 bg-stone-900/25 px-4 py-3">
-            <p className="text-xs font-medium text-stone-300">No password</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-stone-600">
-              No reset flow, no extra fields, less friction.
-            </p>
-          </div>
-          <div className="rounded-xl border border-stone-800/75 bg-stone-900/25 px-4 py-3">
-            <p className="text-xs font-medium text-stone-300">Fast redirect</p>
-            <p className="mt-1 text-[11px] leading-relaxed text-stone-600">
-              You land directly in the dashboard after auth completes.
-            </p>
-          </div>
-        </div>
-
-        <p className="text-[11px] leading-relaxed text-stone-700">
-          By continuing, you agree to our terms of service and privacy policy.
-        </p>
       </div>
     </motion.div>
   );
@@ -135,47 +97,23 @@ function SocialButton({
   provider: Provider;
 }) {
   return (
-    <motion.div transition={{ duration: 0.18, ease: "easeOut" }}>
-      <Button
-        className={cn(
-          "h-14 w-full justify-start gap-4 rounded-2xl border-stone-700/60 bg-stone-800/30 px-4 text-sm font-medium text-stone-200 shadow-none transition-[border-color,background-color,color,box-shadow] duration-200 hover:border-amber-500/25 hover:bg-stone-800/55 hover:text-stone-100 hover:shadow-[0_18px_40px_-24px_rgba(245,158,11,0.35)] disabled:opacity-40",
-          pending &&
-            "border-amber-500/25 bg-amber-500/[0.06] shadow-[0_18px_40px_-24px_rgba(245,158,11,0.35)]",
-        )}
-        disabled={disabled}
-        onClick={onClick}
-        size="lg"
-        type="button"
-        variant="outline"
-      >
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-stone-700/70 bg-stone-900/70 transition-colors duration-200 group-hover/button:border-stone-600 group-hover/button:bg-stone-900">
-          {provider === "google" ? <GoogleMark /> : <GitHubMark />}
-        </span>
-        <span className="flex-1 text-left">
-          {pending ? (
-            <span className="inline-flex items-center gap-2">
-              {label}
-              <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-stone-500 border-t-amber-400" />
-            </span>
-          ) : (
-            label
-          )}
-        </span>
-        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-stone-700/70 bg-stone-900/60 transition-colors duration-200 group-hover/button:border-amber-500/20 group-hover/button:bg-amber-500/[0.08]">
-          <svg
-            className="h-4 w-4 text-stone-600 transition-colors duration-200 group-hover/button:text-amber-300"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M5 12h14M12 5l7 7-7 7" />
-          </svg>
-        </span>
-      </Button>
-    </motion.div>
+    <Button
+      className={cn(
+        "h-12 w-full justify-center gap-3 rounded-2xl border-stone-700/60 bg-stone-800/30 px-4 text-sm font-medium text-stone-200 shadow-none transition-[border-color,background-color,color] duration-200 hover:border-amber-500/25 hover:bg-stone-800/55 hover:text-stone-100 disabled:opacity-40",
+        pending && "border-amber-500/25 bg-amber-500/[0.06]",
+      )}
+      disabled={disabled}
+      onClick={onClick}
+      size="lg"
+      type="button"
+      variant="outline"
+    >
+      {provider === "google" ? <GoogleMark /> : <GitHubMark />}
+      <span>{label}</span>
+      {pending ? (
+        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-stone-500 border-t-amber-400" />
+      ) : null}
+    </Button>
   );
 }
 

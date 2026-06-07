@@ -1,6 +1,16 @@
+"use client";
+
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { motion, type Variants } from "motion/react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
+
+const navLinks = [
+  { label: "Features", href: "#features" },
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Docs", href: "/docs" },
+];
 
 const stats = [
   { value: "Page-linked", label: "answers with citations" },
@@ -13,6 +23,14 @@ const proofPoints = [
   "Contracts",
   "Manuals",
   "Financial reports",
+];
+
+const builtOn = [
+  "Convex",
+  "Next.js",
+  "OpenAI",
+  "Google Document AI",
+  "Better Auth",
 ];
 
 const features = [
@@ -102,64 +120,179 @@ const steps = [
   },
 ];
 
+const docsCards = [
+  {
+    eyebrow: "Get started",
+    title: "Quickstart & first PDF",
+    description:
+      "Go from a fresh account to your first grounded answer in a couple of minutes.",
+    href: "/docs",
+  },
+  {
+    eyebrow: "Using ChatPDF",
+    title: "Uploading, asking & citations",
+    description:
+      "Learn the dashboard, how questions are answered, and how citations link back to the page.",
+    href: "/docs/using-chatpdf/dashboard",
+  },
+  {
+    eyebrow: "Platform",
+    title: "Architecture & retrieval",
+    description:
+      "The processing pipeline, hybrid retrieval, ranking, and how authentication works.",
+    href: "/docs/platform/architecture",
+  },
+  {
+    eyebrow: "Self-hosting",
+    title: "Configure & deploy",
+    description:
+      "Environment variables, local development, and shipping your own instance to production.",
+    href: "/docs/self-hosting/configuration",
+  },
+];
+
+const ease = [0.22, 1, 0.36, 1] as const;
+
+const container: Variants = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.08, delayChildren: 0.05 },
+  },
+};
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease } },
+};
+
+function Reveal({
+  children,
+  className,
+  delay = 0,
+}: {
+  children: ReactNode;
+  className?: string;
+  delay?: number;
+}) {
+  return (
+    <motion.div
+      className={className}
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.6, ease, delay }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export function LandingPage() {
   return (
     <main className="relative min-h-screen overflow-x-clip bg-[#070707] text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
+      {/* ── Atmosphere ──────────────────────────────────── */}
       <div
-        className="pointer-events-none fixed inset-0 opacity-[0.035]"
+        className="pointer-events-none fixed inset-0 opacity-[0.04]"
         style={{
           backgroundImage:
             "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23ffffff' fillOpacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
         }}
       />
-      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/35 to-transparent" />
-      <div className="pointer-events-none fixed top-0 left-1/2 h-[620px] w-[920px] -translate-x-1/2 rounded-full bg-amber-500/[0.045] blur-[140px]" />
-      <div className="pointer-events-none fixed top-[22%] right-[-12%] h-[360px] w-[360px] rounded-full bg-orange-500/[0.035] blur-[130px]" />
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.5]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px)",
+          backgroundSize: "64px 64px",
+          maskImage:
+            "radial-gradient(ellipse 80% 50% at 50% 0%, black 30%, transparent 75%)",
+          WebkitMaskImage:
+            "radial-gradient(ellipse 80% 50% at 50% 0%, black 30%, transparent 75%)",
+        }}
+      />
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
+      <div className="pointer-events-none fixed top-[-120px] left-1/2 h-[680px] w-[980px] -translate-x-1/2 rounded-full bg-amber-500/[0.06] blur-[150px]" />
+      <div className="pointer-events-none fixed top-[20%] right-[-12%] h-[380px] w-[380px] rounded-full bg-orange-500/[0.04] blur-[130px]" />
+      <div className="pointer-events-none fixed bottom-[-10%] left-[-10%] h-[420px] w-[420px] rounded-full bg-amber-600/[0.03] blur-[150px]" />
+
+      {/* ── Nav ─────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50">
+        <div className="border-b border-white/[0.04] bg-[#070707]/70 backdrop-blur-xl">
+          <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
+            <Link href="/" className="transition-opacity hover:opacity-80">
+              <BrandLogo priority />
+            </Link>
+
+            <div className="hidden items-center gap-1 md:flex">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="rounded-full px-3.5 py-1.5 text-sm text-stone-400 transition-colors hover:text-stone-100"
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button
+                asChild
+                variant="ghost"
+                className="hidden rounded-full border border-transparent px-4 text-stone-400 hover:border-stone-800 hover:bg-stone-900/60 hover:text-stone-100 sm:inline-flex"
+              >
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button
+                asChild
+                className="rounded-full bg-amber-500 px-4 font-semibold text-[#070707] hover:bg-amber-400 sm:px-5"
+              >
+                <Link href="/sign-in">Get started</Link>
+              </Button>
+            </div>
+          </nav>
+        </div>
+      </header>
 
       <div className="relative mx-auto max-w-6xl px-6">
-        <nav className="flex items-center justify-between gap-4 py-6">
-          <Link href="/">
-            <BrandLogo priority />
-          </Link>
+        {/* ── Hero ──────────────────────────────────────── */}
+        <motion.section
+          variants={container}
+          initial="hidden"
+          animate="show"
+          className="pt-16 pb-14 text-center sm:pt-24 sm:pb-18 md:pt-28 md:pb-22"
+        >
+          <motion.div variants={fadeUp}>
+            <span className="inline-flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 font-mono text-xs tracking-wide text-amber-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+              AI-powered document intelligence
+            </span>
+          </motion.div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Button
-              asChild
-              variant="ghost"
-              className="rounded-full border border-transparent px-3 text-stone-400 hover:border-stone-800 hover:bg-stone-900/60 hover:text-stone-100 sm:px-4"
-            >
-              <Link href="/sign-in">Sign in</Link>
-            </Button>
-            <Button
-              asChild
-              className="rounded-full bg-amber-500 px-4 font-semibold text-[#070707] hover:bg-amber-400 sm:px-5"
-            >
-              <Link href="/sign-in">Get started</Link>
-            </Button>
-          </div>
-        </nav>
-
-        <section className="pt-14 pb-14 text-center sm:pt-20 sm:pb-18 md:pt-24 md:pb-22">
-          <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 text-sm text-amber-400">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-            AI-powered document intelligence
-          </div>
-
-          <h1 className="mx-auto max-w-4xl text-[2.5rem] leading-[1.08] font-bold tracking-[-0.03em] sm:text-5xl md:text-7xl md:leading-[1.03]">
+          <motion.h1
+            variants={fadeUp}
+            className="mx-auto mt-6 max-w-4xl text-[2.6rem] leading-[1.06] font-bold tracking-[-0.035em] sm:text-5xl md:text-7xl md:leading-[1.02]"
+          >
             Your PDFs have answers.
             <br />
-            <span className="bg-gradient-to-r from-amber-300 via-amber-400 to-orange-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-amber-200 via-amber-400 to-orange-400 bg-clip-text text-transparent">
               Start asking.
             </span>
-          </h1>
+          </motion.h1>
 
-          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-stone-400 sm:mt-7 sm:text-lg">
+          <motion.p
+            variants={fadeUp}
+            className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-stone-400 sm:mt-7 sm:text-lg"
+          >
             Upload any PDF, from research papers to contracts and manuals, and
             get instant answers grounded in the document itself. Every response
             includes citations you can verify.
-          </p>
+          </motion.p>
 
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row">
+          <motion.div
+            variants={fadeUp}
+            className="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row"
+          >
             <Button
               asChild
               size="lg"
@@ -173,15 +306,18 @@ export function LandingPage() {
               variant="outline"
               className="h-12 w-full rounded-full border-stone-700 bg-stone-900/35 px-8 text-base text-stone-300 hover:bg-stone-800/60 hover:text-stone-100 sm:w-auto"
             >
-              <Link href="/sign-in">Sign in</Link>
+              <Link href="/docs">Read the docs</Link>
             </Button>
-          </div>
+          </motion.div>
 
-          <p className="mt-5 text-xs text-stone-600">
+          <motion.p variants={fadeUp} className="mt-5 text-xs text-stone-600">
             Sign in with Google or GitHub · No credit card required
-          </p>
+          </motion.p>
 
-          <div className="mt-8 flex items-center justify-center gap-3">
+          <motion.div
+            variants={fadeUp}
+            className="mt-8 flex items-center justify-center gap-3"
+          >
             <div className="flex -space-x-2">
               {[
                 "bg-amber-500/80",
@@ -202,9 +338,12 @@ export function LandingPage() {
               Trusted by <span className="text-stone-300">researchers</span>{" "}
               &amp; <span className="text-stone-300">professionals</span>
             </p>
-          </div>
+          </motion.div>
 
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
+          <motion.div
+            variants={fadeUp}
+            className="mt-8 flex flex-wrap items-center justify-center gap-2.5"
+          >
             {proofPoints.map((item) => (
               <span
                 key={item}
@@ -213,15 +352,18 @@ export function LandingPage() {
                 {item}
               </span>
             ))}
-          </div>
+          </motion.div>
 
-          <div className="mt-10 grid gap-3 text-left sm:mt-12 sm:grid-cols-3">
+          <motion.div
+            variants={fadeUp}
+            className="mt-10 grid gap-3 text-left sm:mt-12 sm:grid-cols-3"
+          >
             {stats.map((stat) => (
               <div
                 key={stat.label}
                 className="rounded-2xl border border-stone-800/80 bg-stone-900/35 p-5 backdrop-blur-sm transition-transform duration-200 hover:-translate-y-1"
               >
-                <p className="text-sm font-medium text-amber-400">
+                <p className="font-mono text-sm font-medium text-amber-400">
                   {stat.value}
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-stone-500">
@@ -229,18 +371,19 @@ export function LandingPage() {
                 </p>
               </div>
             ))}
-          </div>
-        </section>
+          </motion.div>
+        </motion.section>
 
-        <section className="mx-auto max-w-5xl pb-16 sm:pb-28">
-          <div className="relative rounded-[2rem] border border-stone-800/80 bg-[#0c0c0c]/95 p-1 shadow-[0_45px_140px_-24px_rgba(245,158,11,0.08)]">
+        {/* ── Product mockup ────────────────────────────── */}
+        <Reveal className="mx-auto max-w-5xl pb-16 sm:pb-24">
+          <div className="relative rounded-[2rem] border border-stone-800/80 bg-[#0c0c0c]/95 p-1 shadow-[0_45px_140px_-24px_rgba(245,158,11,0.1)]">
             <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/40 to-transparent" />
 
             <div className="flex items-center gap-1.5 border-b border-stone-800/60 px-4 py-3">
               <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />
               <div className="h-2.5 w-2.5 rounded-full bg-stone-700/80" />
-              <div className="ml-4 flex-1 rounded-md bg-stone-800/40 px-3 py-1 text-center text-[11px] text-stone-600">
+              <div className="ml-4 flex-1 rounded-md bg-stone-800/40 px-3 py-1 text-center font-mono text-[11px] text-stone-600">
                 chatpdf.app/dashboard
               </div>
             </div>
@@ -252,11 +395,11 @@ export function LandingPage() {
                     <div className="flex h-5 w-5 items-center justify-center rounded bg-amber-500/15">
                       <div className="h-2.5 w-2.5 rounded-[3px] bg-amber-500/50" />
                     </div>
-                    <span className="text-xs font-medium text-stone-500">
+                    <span className="font-mono text-xs font-medium text-stone-500">
                       research-paper.pdf
                     </span>
                   </div>
-                  <span className="rounded-full border border-amber-500/15 bg-amber-500/8 px-2.5 py-1 text-[10px] font-medium tracking-[0.16em] text-amber-400/90 uppercase">
+                  <span className="rounded-full border border-amber-500/15 bg-amber-500/8 px-2.5 py-1 font-mono text-[10px] font-medium tracking-[0.16em] text-amber-400/90 uppercase">
                     Indexed
                   </span>
                 </div>
@@ -285,7 +428,7 @@ export function LandingPage() {
 
               <div className="relative flex flex-col p-5">
                 <div className="pointer-events-none absolute top-4 right-4 z-20 hidden rounded-2xl border border-stone-700/70 bg-stone-900/70 px-4 py-3 text-left shadow-[0_24px_70px_-30px_rgba(0,0,0,0.95)] backdrop-blur-md sm:block">
-                  <p className="text-[10px] font-semibold tracking-[0.18em] text-stone-500 uppercase">
+                  <p className="font-mono text-[10px] font-semibold tracking-[0.18em] text-stone-500 uppercase">
                     Context found
                   </p>
                   <p className="mt-2 text-sm font-medium text-stone-200">
@@ -309,7 +452,7 @@ export function LandingPage() {
                         1. Significant improvement in processing speed across
                         all test groups...
                       </p>
-                      <div className="mt-2 flex items-center gap-2 text-[10px] text-amber-400/60">
+                      <div className="mt-2 flex items-center gap-2 font-mono text-[10px] text-amber-400/60">
                         <span>Page 12</span>
                         <span className="h-1 w-1 rounded-full bg-amber-400/40" />
                         <span>Paragraph 3</span>
@@ -339,11 +482,29 @@ export function LandingPage() {
               </div>
             </div>
           </div>
-        </section>
+        </Reveal>
 
-        <section className="pb-16 sm:pb-28">
-          <div className="mb-10 text-center sm:mb-14">
-            <p className="mb-3 text-sm font-medium tracking-[0.2em] text-amber-500/80 uppercase">
+        {/* ── Built on ──────────────────────────────────── */}
+        <Reveal className="pb-16 sm:pb-24">
+          <p className="text-center font-mono text-[11px] tracking-[0.22em] text-stone-600 uppercase">
+            Built on a modern stack
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 sm:gap-x-12">
+            {builtOn.map((name) => (
+              <span
+                key={name}
+                className="text-sm font-medium tracking-tight text-stone-500 transition-colors hover:text-stone-300"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </Reveal>
+
+        {/* ── Features ──────────────────────────────────── */}
+        <section id="features" className="scroll-mt-24 pb-16 sm:pb-28">
+          <Reveal className="mb-10 text-center sm:mb-14">
+            <p className="mb-3 font-mono text-xs tracking-[0.2em] text-amber-500/80 uppercase">
               Capabilities
             </p>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
@@ -353,64 +514,134 @@ export function LandingPage() {
               Focused answers, grounded citations, and a workspace that feels
               closer to analysis software than a generic chatbot.
             </p>
-          </div>
+          </Reveal>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {features.map((feature) => (
-              <div
-                key={feature.title}
-                className="group h-full rounded-2xl border border-stone-800/70 bg-stone-900/30 p-6 transition-[transform,border-color,background-color] duration-200 hover:-translate-y-1.5 hover:border-stone-700/80 hover:bg-stone-900/50"
-              >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 transition-colors group-hover:bg-amber-500/15">
-                  {feature.icon}
+            {features.map((feature, index) => (
+              <Reveal key={feature.title} delay={index * 0.08}>
+                <div className="group h-full rounded-2xl border border-stone-800/70 bg-stone-900/30 p-6 transition-[transform,border-color,background-color] duration-200 hover:-translate-y-1.5 hover:border-amber-500/25 hover:bg-stone-900/50">
+                  <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 transition-colors group-hover:bg-amber-500/15">
+                    {feature.icon}
+                  </div>
+                  <h3 className="mb-2 text-base font-semibold tracking-tight">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-stone-500">
+                    {feature.description}
+                  </p>
                 </div>
-                <h3 className="mb-2 text-base font-semibold tracking-tight">
-                  {feature.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-stone-500">
-                  {feature.description}
-                </p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </section>
 
-        <section className="pb-16 sm:pb-28">
-          <div className="mb-10 text-center sm:mb-14">
-            <p className="mb-3 text-sm font-medium tracking-[0.2em] text-amber-500/80 uppercase">
+        {/* ── How it works ──────────────────────────────── */}
+        <section id="how-it-works" className="scroll-mt-24 pb-16 sm:pb-28">
+          <Reveal className="mb-10 text-center sm:mb-14">
+            <p className="mb-3 font-mono text-xs tracking-[0.2em] text-amber-500/80 uppercase">
               How it works
             </p>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
               Three steps to instant answers
             </h2>
-          </div>
+          </Reveal>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {steps.map((step) => (
-              <div
-                key={step.number}
-                className="h-full rounded-2xl border border-stone-800/70 bg-[#0c0c0c] p-7 transition-transform duration-200 hover:-translate-y-1"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/15 bg-amber-500/8 text-xs font-semibold tracking-[0.18em] text-amber-500/75">
-                    {step.number}
-                  </span>
-                  <div className="h-px flex-1 bg-gradient-to-r from-amber-500/20 to-transparent" />
+            {steps.map((step, index) => (
+              <Reveal key={step.number} delay={index * 0.08}>
+                <div className="h-full rounded-2xl border border-stone-800/70 bg-[#0c0c0c] p-7 transition-transform duration-200 hover:-translate-y-1">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/15 bg-amber-500/8 font-mono text-xs font-semibold tracking-[0.18em] text-amber-500/75">
+                      {step.number}
+                    </span>
+                    <div className="h-px flex-1 bg-gradient-to-r from-amber-500/20 to-transparent" />
+                  </div>
+                  <h3 className="mt-5 mb-2 text-base font-semibold tracking-tight">
+                    {step.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-stone-500">
+                    {step.description}
+                  </p>
                 </div>
-                <h3 className="mt-5 mb-2 text-base font-semibold tracking-tight">
-                  {step.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-stone-500">
-                  {step.description}
-                </p>
-              </div>
+              </Reveal>
             ))}
           </div>
         </section>
 
-        <section className="pb-24">
+        {/* ── Documentation ─────────────────────────────── */}
+        <section id="docs" className="scroll-mt-24 pb-16 sm:pb-28">
+          <Reveal className="mb-10 flex flex-col items-start justify-between gap-5 sm:mb-12 sm:flex-row sm:items-end">
+            <div className="max-w-xl">
+              <p className="mb-3 font-mono text-xs tracking-[0.2em] text-amber-500/80 uppercase">
+                Documentation
+              </p>
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
+                Read the docs, ship your own
+              </h2>
+              <p className="mt-4 text-sm leading-relaxed text-stone-500">
+                Everything from a two-minute quickstart to the retrieval
+                pipeline internals and a full self-hosting guide.
+              </p>
+            </div>
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-full border-stone-700 bg-stone-900/35 px-5 text-sm text-stone-300 hover:bg-stone-800/60 hover:text-stone-100"
+            >
+              <Link href="/docs">
+                Browse all docs
+                <svg
+                  className="ml-1.5 h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </Button>
+          </Reveal>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {docsCards.map((card, index) => (
+              <Reveal key={card.href} delay={index * 0.06}>
+                <Link
+                  href={card.href}
+                  className="group flex h-full flex-col rounded-2xl border border-stone-800/70 bg-stone-900/30 p-6 transition-[transform,border-color,background-color] duration-200 hover:-translate-y-1 hover:border-amber-500/25 hover:bg-stone-900/50"
+                >
+                  <p className="font-mono text-[11px] tracking-[0.18em] text-amber-500/70 uppercase">
+                    {card.eyebrow}
+                  </p>
+                  <h3 className="mt-3 flex items-center gap-2 text-base font-semibold tracking-tight text-stone-100">
+                    {card.title}
+                    <svg
+                      className="h-4 w-4 -translate-x-1 text-stone-600 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:text-amber-400 group-hover:opacity-100"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-stone-500">
+                    {card.description}
+                  </p>
+                </Link>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Final CTA ─────────────────────────────────── */}
+        <Reveal className="pb-24">
           <div className="relative overflow-hidden rounded-2xl border border-stone-800/70 bg-gradient-to-b from-stone-900/65 to-[#070707] px-6 py-12 text-center sm:rounded-[2rem] sm:px-8 sm:py-18">
-            <div className="pointer-events-none absolute top-0 left-1/2 h-44 w-[520px] -translate-x-1/2 rounded-full bg-amber-500/[0.07] blur-[90px]" />
+            <div className="pointer-events-none absolute top-0 left-1/2 h-44 w-[520px] -translate-x-1/2 rounded-full bg-amber-500/[0.08] blur-[90px]" />
             <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-amber-500/35 to-transparent" />
             <h2 className="relative text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">
               Stop searching. Start understanding.
@@ -432,14 +663,79 @@ export function LandingPage() {
               </span>
             </div>
           </div>
-        </section>
+        </Reveal>
 
-        <footer className="flex flex-col items-center justify-between gap-3 border-t border-stone-800/50 py-8 text-xs text-stone-600 sm:flex-row">
-          <span>© 2026 ChatPDF</span>
-          <div className="flex items-center gap-1.5">
-            <span>Built with</span>
-            <span className="text-amber-500">◆</span>
-            <span>Convex &amp; Next.js</span>
+        {/* ── Footer ────────────────────────────────────── */}
+        <footer className="border-t border-stone-800/50 py-12">
+          <div className="grid gap-8 sm:grid-cols-[1.4fr_1fr_1fr]">
+            <div>
+              <BrandLogo />
+              <p className="mt-4 max-w-xs text-sm leading-relaxed text-stone-600">
+                Ask your PDFs anything and get answers grounded in the document,
+                with citations you can verify.
+              </p>
+            </div>
+
+            <div>
+              <p className="font-mono text-[11px] tracking-[0.18em] text-stone-500 uppercase">
+                Product
+              </p>
+              <ul className="mt-4 space-y-2.5 text-sm text-stone-500">
+                <li>
+                  <Link href="#features" className="hover:text-stone-200">
+                    Features
+                  </Link>
+                </li>
+                <li>
+                  <Link href="#how-it-works" className="hover:text-stone-200">
+                    How it works
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/sign-in" className="hover:text-stone-200">
+                    Sign in
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-mono text-[11px] tracking-[0.18em] text-stone-500 uppercase">
+                Documentation
+              </p>
+              <ul className="mt-4 space-y-2.5 text-sm text-stone-500">
+                <li>
+                  <Link href="/docs" className="hover:text-stone-200">
+                    Get started
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/docs/platform/architecture"
+                    className="hover:text-stone-200"
+                  >
+                    Architecture
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/docs/self-hosting/configuration"
+                    className="hover:text-stone-200"
+                  >
+                    Self-hosting
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-stone-800/50 pt-6 text-xs text-stone-600 sm:flex-row">
+            <span>© 2026 ChatPDF</span>
+            <div className="flex items-center gap-1.5">
+              <span>Built with</span>
+              <span className="text-amber-500">◆</span>
+              <span>Convex &amp; Next.js</span>
+            </div>
           </div>
         </footer>
       </div>
