@@ -27,39 +27,74 @@ export const selfHostingGroup: DocsGroup = {
       sections: [
         {
           id: "services",
-          title: "Services",
+          title: "Required services",
           body: (
-            <InfoGrid
-              items={[
-                {
-                  title: "Convex",
-                  icon: Database01Icon,
-                  description:
-                    "Database, generated API bindings, server functions, and background jobs.",
-                },
-                {
-                  title: "Clerk",
-                  icon: Shield01Icon,
-                  description:
-                    "Google and GitHub sessions for dashboard access.",
-                },
-                {
-                  title: "OpenAI",
-                  icon: AiMagicIcon,
-                  description: "Embeddings and grounded answer text.",
-                },
-                {
-                  title: "Mistral OCR",
-                  icon: File01Icon,
-                  description: "OCR 4 extraction for every uploaded PDF.",
-                },
-                {
-                  title: "PostHog",
-                  icon: Analytics01Icon,
-                  description: "Optional analytics for product events.",
-                },
-              ]}
-            />
+            <>
+              <p>
+                Each service below needs an account and credentials before the
+                app will work end-to-end.
+              </p>
+              <InfoGrid
+                items={[
+                  {
+                    title: "Convex",
+                    icon: Database01Icon,
+                    description:
+                      "Database, generated API bindings, server functions, file storage, and background jobs. Create a project at convex.dev.",
+                  },
+                  {
+                    title: "Clerk",
+                    icon: Shield01Icon,
+                    description:
+                      "Google and GitHub social sign-in, JWT issuance, and session management. Create an app at clerk.com.",
+                  },
+                  {
+                    title: "OpenAI",
+                    icon: AiMagicIcon,
+                    description:
+                      "Embeddings (text-embedding-3-small) and grounded answer generation. Requires an API key from platform.openai.com.",
+                  },
+                  {
+                    title: "Mistral",
+                    icon: File01Icon,
+                    description:
+                      "OCR 4 extracts page text from every uploaded PDF. Requires an API key from console.mistral.ai.",
+                  },
+                  {
+                    title: "PostHog",
+                    icon: Analytics01Icon,
+                    description:
+                      "Optional. Product analytics for page views and events. Omit the env vars to disable.",
+                  },
+                ]}
+              />
+            </>
+          ),
+        },
+        {
+          id: "clerk-setup",
+          title: "Clerk JWT template",
+          body: (
+            <>
+              <p>
+                After creating a Clerk application, you must create a JWT
+                template so Convex can verify Clerk sessions.
+              </p>
+              <BulletList
+                items={[
+                  "In your Clerk dashboard, go to JWT Templates and create a new template.",
+                  'Name it exactly convex — Convex looks for this template by name.',
+                  "Set the audience claim to your Convex deployment URL (the value of NEXT_PUBLIC_CONVEX_URL).",
+                  "Copy the issuer URL from the template and set it as CLERK_JWT_ISSUER_DOMAIN.",
+                ]}
+              />
+              <Callout type="warning" title="Template name must be convex">
+                Convex's auth integration expects the JWT template to be named{" "}
+                <code>convex</code> exactly. Any other name will cause
+                authentication failures at the Convex backend, even if Clerk
+                sign-in itself works.
+              </Callout>
+            </>
           ),
         },
         {
@@ -69,6 +104,11 @@ export const selfHostingGroup: DocsGroup = {
             <>
               <p>
                 Copy the example file, then fill in deployment-specific values.
+                Every variable is documented on the{" "}
+                <a href="/docs/reference/environment-variables">
+                  Environment variables
+                </a>{" "}
+                reference page.
               </p>
               <CodeBlock title="Create your env file">{`cp .env.example .env.local`}</CodeBlock>
             </>
@@ -76,13 +116,14 @@ export const selfHostingGroup: DocsGroup = {
         },
         {
           id: "site-urls",
-          title: "Site URLs",
+          title: "Keep your URLs aligned",
           body: (
-            <Callout type="warning" title="Keep your URLs aligned">
-              Keep <code>SITE_URL</code>, <code>NEXT_PUBLIC_SITE_URL</code>,
-              Clerk callback URLs, and the Convex site URL consistent.
-              Mismatched URLs are the most common reason local sign-in works
-              while production sign-in fails.
+            <Callout type="warning" title="URL mismatch is the most common setup failure">
+              <code>SITE_URL</code>, <code>NEXT_PUBLIC_SITE_URL</code>, the
+              Convex site URL, and Clerk's allowed callback URLs must all point
+              to the same origin. A mismatch is the most common reason local
+              sign-in works while production sign-in fails — or OAuth redirects
+              land on an error page.
             </Callout>
           ),
         },
@@ -146,10 +187,11 @@ pnpm build`}</CodeBlock>
           title: "Vercel",
           body: (
             <p>
-              The repository includes a Vercel configuration file. Set the same
-              environment variables in Vercel that you use locally, then deploy
-              the Next.js app and the Convex backend with matching production
-              URLs.
+              The repository includes a <code>vercel.json</code> configuration
+              file. Set all environment variables in your Vercel project
+              settings using the same values as your production{" "}
+              <code>.env.local</code>, updating any localhost URLs to the
+              production domain.
             </p>
           ),
         },
@@ -159,11 +201,17 @@ pnpm build`}</CodeBlock>
           body: (
             <BulletList
               items={[
-                "Production Convex deployment is configured.",
-                "Clerk callback URLs point to the production domain.",
-                "Clerk publishable and secret keys are configured.",
-                "OpenAI and Mistral credentials are present.",
-                "PostHog values are present if analytics should run.",
+                "Production Convex deployment is running and CONVEX_DEPLOYMENT is set.",
+                "NEXT_PUBLIC_CONVEX_URL points to the production deployment.",
+                "Clerk application is on the Pro or Production plan with Google and GitHub OAuth enabled.",
+                "Clerk JWT template named convex exists with the production Convex URL as audience.",
+                "CLERK_JWT_ISSUER_DOMAIN matches the JWT template's issuer URL.",
+                "Clerk callback URLs include the production domain.",
+                "Clerk publishable and secret keys are the production keys, not the dev keys.",
+                "OPENAI_API_KEY, OPENAI_EMBEDDING_MODEL, and OPENAI_CHAT_MODEL are set.",
+                "MISTRAL_API_KEY and MISTRAL_OCR_MODEL are set.",
+                "SITE_URL and NEXT_PUBLIC_SITE_URL match the production domain.",
+                "PostHog values are set if analytics should run (optional).",
               ]}
             />
           ),

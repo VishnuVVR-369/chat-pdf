@@ -207,17 +207,24 @@ export const getStartedGroup: DocsGroup = {
             <>
               <p>
                 The project expects a recent Node runtime, pnpm, and credentials
-                for the services that power indexing and answers.
+                for four external services.
               </p>
               <BulletList
                 items={[
                   "Node 24.10 or newer.",
                   "pnpm matching the workspace package manager.",
-                  "A Convex deployment for the database, functions, and background jobs.",
-                  "A Clerk dev application with Google or GitHub social sign-in enabled.",
-                  "OpenAI and Mistral credentials for indexing and answers.",
+                  "A Convex deployment — create one free at convex.dev.",
+                  "A Clerk application with Google and/or GitHub social sign-in enabled, plus a JWT template named convex pointing to your Convex deployment URL.",
+                  "An OpenAI API key for embeddings and answer generation.",
+                  "A Mistral API key for OCR (mistral-ocr-4-0).",
                 ]}
               />
+              <Callout type="tip" title="Clerk JWT template">
+                Before filling in the env file, go to your Clerk dashboard →
+                JWT Templates and create a template named <code>convex</code>{" "}
+                with your Convex deployment URL as the audience. Copy the
+                issuer URL — that is your <code>CLERK_JWT_ISSUER_DOMAIN</code>.
+              </Callout>
             </>
           ),
         },

@@ -358,17 +358,41 @@ export const platformGroup: DocsGroup = {
       eyebrow: "Security",
       title: "Authentication",
       description:
-        "How public pages, protected dashboard routes, and provider sign-in fit together.",
+        "How Clerk sessions flow into Convex identity, and how public and protected routes are separated.",
       sections: [
         {
           id: "providers",
-          title: "Providers",
+          title: "Sign-in providers",
           body: (
-            <p>
-              The app is configured for Google and GitHub sign-in through Better
-              Auth. OAuth credentials must match the local and production site
-              URLs configured in the environment.
-            </p>
+            <>
+              <p>
+                The app uses Clerk for authentication with Google and GitHub as
+                social sign-in providers. Clerk handles OAuth flows, session
+                management, and issues JWTs that Convex can verify.
+              </p>
+              <InfoGrid
+                items={[
+                  {
+                    title: "Clerk",
+                    icon: Shield01Icon,
+                    description:
+                      "Manages Google and GitHub OAuth, issues signed JWTs, and provides the sign-in UI components.",
+                  },
+                  {
+                    title: "Convex integration",
+                    icon: Key01Icon,
+                    description:
+                      "Convex verifies Clerk JWTs using the configured JWT issuer domain. The verified identity becomes the server-side owner token.",
+                  },
+                ]}
+              />
+              <Callout type="note" title="JWT template required">
+                In your Clerk dashboard, create a JWT template named{" "}
+                <code>convex</code>. Set the audience to your Convex deployment
+                URL. The <code>CLERK_JWT_ISSUER_DOMAIN</code> env var must point
+                to this template’s issuer so Convex can verify tokens.
+              </Callout>
+            </>
           ),
         },
         {
@@ -388,12 +412,12 @@ export const platformGroup: DocsGroup = {
                     title: "Protected",
                     icon: Key01Icon,
                     description:
-                      "The dashboard and all document data require a valid authenticated session.",
+                      "The dashboard and all document data require a valid Clerk session. Unauthenticated requests are redirected to sign-in.",
                   },
                 ]}
               />
               <Diagram
-                caption="The auth boundary. Clerk establishes a Convex identity; every data read is checked against the owner token."
+                caption="The auth boundary. Clerk issues a JWT; Convex verifies it and derives the owner token used to scope every data read."
                 chart={authBoundariesDiagram}
               />
             </>
@@ -401,15 +425,38 @@ export const platformGroup: DocsGroup = {
         },
         {
           id: "convex",
-          title: "Convex auth",
+          title: "Convex identity",
           body: (
-            <Callout type="warning" title="The backend is the source of truth">
-              Convex functions treat the authenticated identity’s{" "}
-              <code>tokenIdentifier</code> as the server-side source of truth
-              and filter every document, page, chunk, and conversation by owner.
-              Client-side redirects improve the experience, but the backend
-              checks protect the data boundary.
-            </Callout>
+            <>
+              <p>
+                When a signed-in user calls a Convex function, the Clerk JWT is
+                verified by Convex against the configured issuer domain. Convex
+                derives a <code>tokenIdentifier</code> from the verified claims
+                and passes it as the server-side identity. Every Convex query
+                and mutation that touches document data filters on{" "}
+                <code>ownerTokenIdentifier</code> — so users can only read and
+                write their own documents.
+              </p>
+              <Callout type="warning" title="The backend is the source of truth">
+                Client-side redirects improve the experience but are not the
+                security layer. The Convex backend re-checks the authenticated
+                identity on every request. Even if a client-side redirect is
+                bypassed, the backend rejects unauthorized data access.
+              </Callout>
+            </>
+          ),
+        },
+        {
+          id: "sso-callback",
+          title: "SSO callback",
+          body: (
+            <p>
+              The <code>/sso-callback</code> route handles the OAuth redirect
+              from Clerk after a social sign-in. Once Clerk completes the
+              handshake, the user is forwarded to the dashboard. No additional
+              configuration is needed beyond the Clerk callback URL matching
+              your site URL.
+            </p>
           ),
         },
       ],
