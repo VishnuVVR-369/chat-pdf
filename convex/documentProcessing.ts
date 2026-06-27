@@ -1,23 +1,29 @@
 "use node";
 
+import { Mistral } from "@mistralai/mistralai";
+import type {
+  OCRPageObject,
+  OCRResponse,
+} from "@mistralai/mistralai/models/components";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { internalAction } from "./_generated/server";
-import { createGoogleClients } from "./googleCloud";
 import { createOpenAiEmbeddingClient, loadOpenAiChatConfig } from "./openAi";
+import { modelSupportsTemperature } from "./modelCapabilities";
 
 const MAX_PROCESSING_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [15_000, 60_000];
-const BATCH_PAGE_LIMIT = 100;
+const OCR_PAGE_LIMIT = 100;
 const EMBEDDING_DIMENSIONS = 1536;
 const EMBEDDING_REQUEST_BATCH_SIZE = 64;
 const DOCUMENT_PAGE_BATCH_SIZE = 32;
 const DOCUMENT_CHUNK_WORD_TARGET = 450;
 const DOCUMENT_CHUNK_WORD_OVERLAP = 75;
 const PAGE_SUMMARY_BATCH_SIZE = 10;
-const OCR_METHOD = "document_ai_batch" as const;
+const OCR_METHOD = "mistral_ocr" as const;
+const DEFAULT_MISTRAL_OCR_MODEL = "mistral-ocr-4-0";
 const EMPTY_PAGE_SUMMARY = "No meaningful extractable text on this page.";
 const EMPTY_DOCUMENT_SUMMARY =
   "No meaningful extractable text was found in this document.";
@@ -72,43 +78,24 @@ type DocumentSnapshot = {
   ownerTokenIdentifier: string;
   originalFilename: string;
   pageCount: number;
-  ocrGcsInputUri: string | null;
-};
-
-type GoogleClients = ReturnType<typeof createGoogleClients>;
-
-type GcsBatchMetadata = {
-  inputUri: string;
-  outputPrefix: string;
-  finalJsonUri: string;
+  fileStorageId: Id<"_storage"> | null;
+  ocrResultStorageId: Id<"_storage"> | null;
 };
 
 type StoredOcrPayload = {
-  provider: "google_document_ai";
-  processorName: string;
-  method: OcrMethod;
+  provider: "mistral";
+  model: string;
+  mistralFileId: string;
   generatedAt: string;
-  documents: DocumentLike[];
-  batch: {
-    inputUri: string;
-    outputPrefix: string;
-    outputFiles: string[];
-  };
+  response: OCRResponse;
 };
 
-type DocumentLike = {
-  text?: string | null;
-  pages?: Array<{
-    pageNumber?: number | null;
-    layout?: {
-      textAnchor?: {
-        textSegments?: Array<{
-          startIndex?: string | number | null;
-          endIndex?: string | number | null;
-        }> | null;
-      } | null;
-    } | null;
-  }> | null;
+type MistralOcrResult = {
+  method: OcrMethod;
+  model: string;
+  mistralFileId: string;
+  pages: OCRPageObject[];
+  ocrResultStorageId: Id<"_storage">;
 };
 
 type PageText = {
@@ -141,75 +128,18 @@ type EmbeddedChunk = DocumentChunk & {
   embeddingTokenCount?: number;
 };
 
-function coerceTextIndex(value: string | number | null | undefined) {
-  if (typeof value === "number") {
-    return value;
-  }
-
-  if (typeof value === "string" && value.length > 0) {
-    return Number.parseInt(value, 10);
-  }
-
-  return 0;
-}
-
-function extractTextFromAnchor(
-  fullText: string,
-  textAnchor:
-    | {
-        textSegments?: Array<{
-          startIndex?: string | number | null;
-          endIndex?: string | number | null;
-        }> | null;
-      }
-    | null
-    | undefined,
-) {
-  const segments = textAnchor?.textSegments ?? [];
-
-  if (segments.length === 0) {
-    return "";
-  }
-
-  return segments
-    .map((segment) => {
-      const start = coerceTextIndex(segment.startIndex);
-      const end = coerceTextIndex(segment.endIndex);
-      return fullText.slice(start, end);
-    })
-    .join("");
-}
-
 function normalizeExtractedText(text: string) {
   return text.replace(/\u0000/g, "").trim();
 }
 
-function extractPageTexts(
-  documents: DocumentLike[],
-  expectedPageCount: number,
-) {
+function extractPageTexts(pages: OCRPageObject[], expectedPageCount: number) {
   const extractedTextByPageNumber = new Map<number, string>();
 
-  for (const document of documents) {
-    const fullText = document.text ?? "";
-    const documentPages = document.pages ?? [];
-
-    if (documentPages.length === 0 && fullText.trim().length > 0) {
-      extractedTextByPageNumber.set(1, normalizeExtractedText(fullText));
-      continue;
-    }
-
-    for (const [index, page] of documentPages.entries()) {
-      const pageNumber =
-        typeof page.pageNumber === "number" && page.pageNumber > 0
-          ? page.pageNumber
-          : index + 1;
-      const extractedText = normalizeExtractedText(
-        extractTextFromAnchor(fullText, page.layout?.textAnchor),
-      );
-
-      extractedTextByPageNumber.set(pageNumber, extractedText);
-    }
+  for (const page of pages) {
+    extractedTextByPageNumber.set(
+      page.index + 1,
+      normalizeExtractedText(page.markdown),
+    );
   }
 
   const highestDetectedPageNumber = Math.max(
@@ -229,30 +159,13 @@ function getOcrMethod(pageCount: number): OcrMethod {
     throw new Error("The uploaded PDF is missing its page count.");
   }
 
-  if (pageCount > BATCH_PAGE_LIMIT) {
+  if (pageCount > OCR_PAGE_LIMIT) {
     throw new Error(
-      `Document OCR supports up to ${BATCH_PAGE_LIMIT} pages. Received ${pageCount} pages.`,
+      `Mistral OCR supports up to ${OCR_PAGE_LIMIT} pages in this pipeline. Received ${pageCount} pages.`,
     );
   }
 
   return OCR_METHOD;
-}
-
-async function writeFinalOcrPayloadToGcs(
-  clients: GoogleClients,
-  outputPrefix: string,
-  payload: StoredOcrPayload,
-) {
-  const finalObjectName = `${outputPrefix}/final.json`;
-  await clients.storageClient
-    .bucket(clients.bucketName)
-    .file(finalObjectName)
-    .save(JSON.stringify(payload, null, 2), {
-      contentType: "application/json",
-      resumable: false,
-    });
-
-  return `gs://${clients.bucketName}/${finalObjectName}`;
 }
 
 function getBatches<T>(items: T[], batchSize: number) {
@@ -310,7 +223,7 @@ async function fetchStructuredChatCompletion(
     body: JSON.stringify({
       model: chatModel,
       messages,
-      temperature,
+      ...(modelSupportsTemperature(chatModel) ? { temperature } : {}),
       response_format: responseFormat,
     }),
   });
@@ -725,76 +638,110 @@ function getDisplayErrorMessage(error: unknown) {
     : error.message;
 }
 
-async function runBatchOcr(clients: GoogleClients, document: DocumentSnapshot) {
-  if (!document.ocrGcsInputUri) {
-    throw new Error("The uploaded PDF is missing its GCS source URI.");
+function loadMistralOcrConfig() {
+  const apiKey = process.env.MISTRAL_API_KEY;
+
+  if (!apiKey) {
+    throw new Error("MISTRAL_API_KEY is required for OCR.");
   }
 
-  const bucket = clients.storageClient.bucket(clients.bucketName);
-  const inputUri = document.ocrGcsInputUri;
-  const outputPrefix = `${clients.outputPrefix}/${document.documentId}`;
-  const outputUri = `gs://${clients.bucketName}/${outputPrefix}/`;
+  return {
+    apiKey,
+    ocrModel: process.env.MISTRAL_OCR_MODEL ?? DEFAULT_MISTRAL_OCR_MODEL,
+  };
+}
 
-  await bucket.deleteFiles({
-    prefix: outputPrefix,
-    force: true,
-  });
+function createMistralOcrClient() {
+  const { apiKey, ocrModel } = loadMistralOcrConfig();
 
-  const [operation] = await clients.documentAiClient.batchProcessDocuments({
-    name: clients.processorName,
-    inputDocuments: {
-      gcsDocuments: {
-        documents: [
-          {
-            gcsUri: inputUri,
-            mimeType: "application/pdf",
-          },
-        ],
-      },
-    },
-    documentOutputConfig: {
-      gcsOutputConfig: {
-        gcsUri: outputUri,
-        shardingConfig: {
-          pagesPerShard: BATCH_PAGE_LIMIT,
-          pagesOverlap: 0,
-        },
-      },
-    },
-  });
+  return {
+    client: new Mistral({ apiKey }),
+    ocrModel,
+  };
+}
 
-  await operation.promise();
-
-  const [files] = await bucket.getFiles({
-    prefix: outputPrefix,
-  });
-  const jsonFiles = files.filter((file) => file.name.endsWith(".json"));
-
-  if (jsonFiles.length === 0) {
-    throw new Error(
-      "Document AI batch processing completed without JSON output.",
-    );
+async function runMistralOcr(
+  ctx: Pick<ActionCtx, "storage">,
+  document: DocumentSnapshot,
+): Promise<MistralOcrResult> {
+  if (!document.fileStorageId) {
+    throw new Error("The uploaded PDF is missing its Convex storage id.");
   }
 
-  const documents = (
-    await Promise.all(
-      jsonFiles
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(async (file) => {
-          const [contents] = await file.download();
-          return JSON.parse(contents.toString("utf-8")) as DocumentLike;
-        }),
-    )
-  ).filter((value): value is DocumentLike => Boolean(value));
+  const pdfBlob = await ctx.storage.get(document.fileStorageId);
+
+  if (!pdfBlob) {
+    throw new Error("The uploaded PDF could not be found in Convex storage.");
+  }
+
+  const { client, ocrModel } = createMistralOcrClient();
+  const pdfBytes = new Uint8Array(await pdfBlob.arrayBuffer());
+  const uploadedPdf = await client.files.upload({
+    file: {
+      fileName: document.originalFilename,
+      content: pdfBytes,
+    },
+    purpose: "ocr",
+  });
+  const response = await client.ocr.process({
+    model: ocrModel,
+    document: {
+      type: "file",
+      fileId: uploadedPdf.id,
+    },
+    tableFormat: "markdown",
+    includeImageBase64: false,
+    includeBlocks: true,
+    confidenceScoresGranularity: "page",
+  });
+  const payload: StoredOcrPayload = {
+    provider: "mistral",
+    model: response.model,
+    mistralFileId: uploadedPdf.id,
+    generatedAt: new Date().toISOString(),
+    response,
+  };
+  const ocrResultStorageId = await ctx.storage.store(
+    new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    }),
+  );
+
+  // The parsed OCR result is now persisted in Convex storage, so the uploaded
+  // copy on Mistral's side is no longer needed. Best-effort cleanup.
+  try {
+    await client.files.delete({ fileId: uploadedPdf.id });
+  } catch {
+    // Ignore cleanup failures; an orphaned Mistral file must not fail OCR.
+  }
 
   return {
     method: OCR_METHOD,
-    documents,
-    batch: {
-      inputUri,
-      outputPrefix,
-      outputFiles: jsonFiles.map((file) => file.name),
-    },
+    model: response.model,
+    mistralFileId: uploadedPdf.id,
+    pages: response.pages,
+    ocrResultStorageId,
+  };
+}
+
+async function loadCheckpointedOcr(
+  ctx: Pick<ActionCtx, "storage">,
+  ocrResultStorageId: Id<"_storage">,
+): Promise<MistralOcrResult> {
+  const blob = await ctx.storage.get(ocrResultStorageId);
+
+  if (!blob) {
+    throw new Error("Checkpointed OCR result is missing from Convex storage.");
+  }
+
+  const payload = JSON.parse(await blob.text()) as StoredOcrPayload;
+
+  return {
+    method: OCR_METHOD,
+    model: payload.model,
+    mistralFileId: payload.mistralFileId,
+    pages: payload.response.pages,
+    ocrResultStorageId,
   };
 }
 
@@ -817,39 +764,32 @@ export const runDocumentOcr = internalAction({
       return null;
     }
 
-    let batchMetadata: GcsBatchMetadata | undefined;
     let ocrMethod: OcrMethod | undefined;
+    let mistralFileId: string | undefined;
 
     try {
-      const clients = createGoogleClients();
       ocrMethod = getOcrMethod(document.pageCount);
 
-      const result = await runBatchOcr(clients, document);
-      const payload: StoredOcrPayload = {
-        provider: "google_document_ai",
-        processorName: clients.processorName,
-        method: result.method,
-        generatedAt: new Date().toISOString(),
-        documents: result.documents,
-        batch: {
-          inputUri: result.batch.inputUri,
-          outputPrefix: result.batch.outputPrefix,
-          outputFiles: result.batch.outputFiles,
-        },
-      };
-
-      batchMetadata = {
-        inputUri: result.batch.inputUri,
-        outputPrefix: result.batch.outputPrefix,
-        finalJsonUri: "",
-      };
-      batchMetadata.finalJsonUri = await writeFinalOcrPayloadToGcs(
-        clients,
-        batchMetadata.outputPrefix,
-        payload,
-      );
-
-      const pages = extractPageTexts(result.documents, document.pageCount);
+      // Reuse a prior attempt's OCR output instead of re-running the (costly)
+      // Mistral OCR call when a transient failure happened after OCR succeeded.
+      let result: MistralOcrResult;
+      if (document.ocrResultStorageId) {
+        result = await loadCheckpointedOcr(ctx, document.ocrResultStorageId);
+      } else {
+        result = await runMistralOcr(ctx, document);
+        await ctx.runMutation(internal.documents.recordOcrCheckpoint, {
+          documentId: document.documentId,
+          attemptNumber: args.attemptNumber,
+          ocrResultStorageId: result.ocrResultStorageId,
+          ocrMethod: result.method,
+          ocrModel: result.model,
+          ...(result.mistralFileId !== undefined
+            ? { mistralFileId: result.mistralFileId }
+            : {}),
+        });
+      }
+      mistralFileId = result.mistralFileId;
+      const pages = extractPageTexts(result.pages, document.pageCount);
       const chunks = buildDocumentChunks(pages);
       const { embeddingModel, embeddedChunks } =
         await embedDocumentChunks(chunks);
@@ -867,15 +807,14 @@ export const runDocumentOcr = internalAction({
         documentId: document.documentId,
         attemptNumber: args.attemptNumber,
         ocrMethod: result.method,
-        ocrModelOrProcessor: clients.processorName,
+        ocrModel: result.model,
+        mistralFileId: result.mistralFileId,
+        ocrResultStorageId: result.ocrResultStorageId,
         embeddingModel,
         summaryModel,
         documentSummary: summary,
         embeddedPageCount: summarizedPages.length,
         embeddedChunkCount: embeddedChunks.length,
-        ocrGcsInputUri: batchMetadata.inputUri,
-        ocrGcsOutputPrefix: batchMetadata.outputPrefix,
-        ocrFinalJsonGcsUri: batchMetadata.finalJsonUri,
       });
     } catch (error) {
       const canRetry =
@@ -905,12 +844,7 @@ export const runDocumentOcr = internalAction({
         attemptNumber: args.attemptNumber,
         errorMessage: getDisplayErrorMessage(error),
         ...(ocrMethod !== undefined ? { ocrMethod } : {}),
-        ...(batchMetadata?.inputUri !== undefined
-          ? { ocrGcsInputUri: batchMetadata.inputUri }
-          : {}),
-        ...(batchMetadata?.outputPrefix !== undefined
-          ? { ocrGcsOutputPrefix: batchMetadata.outputPrefix }
-          : {}),
+        ...(mistralFileId !== undefined ? { mistralFileId } : {}),
       });
     }
 

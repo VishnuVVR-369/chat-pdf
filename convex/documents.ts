@@ -11,7 +11,7 @@ const documentStatusValidator = v.union(
   v.literal("ready"),
   v.literal("failed"),
 );
-const ocrMethodValidator = v.literal("document_ai_batch");
+const ocrMethodValidator = v.literal("mistral_ocr");
 const documentListItemValidator = v.object({
   _id: v.id("documents"),
   _creationTime: v.number(),
@@ -22,19 +22,20 @@ const documentListItemValidator = v.object({
   processingError: v.optional(v.string()),
   storageContentType: v.optional(v.string()),
   storageSize: v.number(),
+  fileStorageId: v.optional(v.id("_storage")),
   uploadCompletedAt: v.number(),
   processingStartedAt: v.optional(v.number()),
   ocrCompletedAt: v.optional(v.number()),
   embeddingsCompletedAt: v.optional(v.number()),
   lastProcessedAt: v.optional(v.number()),
   ocrMethod: v.optional(ocrMethodValidator),
-  ocrProvider: v.optional(v.literal("google_document_ai")),
-  ocrModelOrProcessor: v.optional(v.string()),
+  ocrProvider: v.optional(v.literal("mistral")),
+  ocrModel: v.optional(v.string()),
+  mistralFileId: v.optional(v.string()),
+  ocrResultStorageId: v.optional(v.id("_storage")),
   embeddingModel: v.optional(v.string()),
   embeddedPageCount: v.optional(v.number()),
   embeddedChunkCount: v.optional(v.number()),
-  ocrGcsInputUri: v.optional(v.string()),
-  ocrFinalJsonGcsUri: v.optional(v.string()),
   fileUrl: v.union(v.string(), v.null()),
 });
 
@@ -90,6 +91,7 @@ function toDocumentListItem(document: Doc<"documents">) {
     processingError: document.processingError,
     storageContentType: document.storageContentType,
     storageSize: document.storageSize,
+    fileStorageId: document.fileStorageId,
     uploadCompletedAt: document.uploadCompletedAt,
     processingStartedAt: document.processingStartedAt,
     ocrCompletedAt: document.ocrCompletedAt,
@@ -97,12 +99,12 @@ function toDocumentListItem(document: Doc<"documents">) {
     lastProcessedAt: document.lastProcessedAt,
     ocrMethod: document.ocrMethod,
     ocrProvider: document.ocrProvider,
-    ocrModelOrProcessor: document.ocrModelOrProcessor,
+    ocrModel: document.ocrModel,
+    mistralFileId: document.mistralFileId,
+    ocrResultStorageId: document.ocrResultStorageId,
     embeddingModel: document.embeddingModel,
     embeddedPageCount: document.embeddedPageCount,
     embeddedChunkCount: document.embeddedChunkCount,
-    ocrGcsInputUri: document.ocrGcsInputUri,
-    ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri,
     fileUrl: null,
   };
 }
@@ -133,36 +135,11 @@ export const reserveDirectUploadDocument = internalMutation({
   },
 });
 
-export const setReservedDocumentInputGcsUri = internalMutation({
-  args: {
-    documentId: v.id("documents"),
-    ownerTokenIdentifier: v.string(),
-    ocrGcsInputUri: v.string(),
-  },
-  returns: v.boolean(),
-  handler: async (ctx, args) => {
-    const document = await ctx.db.get(args.documentId);
-
-    if (
-      !document ||
-      document.ownerTokenIdentifier !== args.ownerTokenIdentifier ||
-      document.status !== "uploading"
-    ) {
-      return false;
-    }
-
-    await ctx.db.patch(args.documentId, {
-      ocrGcsInputUri: args.ocrGcsInputUri,
-    });
-
-    return true;
-  },
-});
-
 export const completeDirectUploadRecord = internalMutation({
   args: {
     documentId: v.id("documents"),
     ownerTokenIdentifier: v.string(),
+    fileStorageId: v.id("_storage"),
     contentType: v.optional(v.string()),
     storageSize: v.number(),
     sha256: v.string(),
@@ -184,6 +161,7 @@ export const completeDirectUploadRecord = internalMutation({
       ...(args.contentType !== undefined
         ? { storageContentType: args.contentType }
         : {}),
+      fileStorageId: args.fileStorageId,
       storageSize: args.storageSize,
       sha256: args.sha256,
       pageCount: args.pageCount,
@@ -238,7 +216,8 @@ export const beginProcessingAttempt = internalMutation({
       ownerTokenIdentifier: v.string(),
       originalFilename: v.string(),
       pageCount: v.number(),
-      ocrGcsInputUri: v.union(v.string(), v.null()),
+      fileStorageId: v.union(v.id("_storage"), v.null()),
+      ocrResultStorageId: v.union(v.id("_storage"), v.null()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -264,8 +243,43 @@ export const beginProcessingAttempt = internalMutation({
       ownerTokenIdentifier: document.ownerTokenIdentifier,
       originalFilename: document.originalFilename,
       pageCount: document.pageCount ?? 0,
-      ocrGcsInputUri: document.ocrGcsInputUri ?? null,
+      fileStorageId: document.fileStorageId ?? null,
+      ocrResultStorageId: document.ocrResultStorageId ?? null,
     };
+  },
+});
+
+export const recordOcrCheckpoint = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    attemptNumber: v.number(),
+    ocrResultStorageId: v.id("_storage"),
+    ocrMethod: ocrMethodValidator,
+    ocrModel: v.string(),
+    mistralFileId: v.optional(v.string()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      (document.processingAttemptCount ?? 0) !== args.attemptNumber
+    ) {
+      return null;
+    }
+
+    await ctx.db.patch(args.documentId, {
+      ocrResultStorageId: args.ocrResultStorageId,
+      ocrMethod: args.ocrMethod,
+      ocrProvider: "mistral",
+      ocrModel: args.ocrModel,
+      ...(args.mistralFileId !== undefined
+        ? { mistralFileId: args.mistralFileId }
+        : {}),
+    });
+
+    return null;
   },
 });
 
@@ -413,15 +427,14 @@ export const completeProcessingSuccess = internalMutation({
     documentId: v.id("documents"),
     attemptNumber: v.number(),
     ocrMethod: ocrMethodValidator,
-    ocrModelOrProcessor: v.string(),
+    ocrModel: v.string(),
+    mistralFileId: v.optional(v.string()),
+    ocrResultStorageId: v.optional(v.id("_storage")),
     embeddingModel: v.string(),
     summaryModel: v.string(),
     documentSummary: v.string(),
     embeddedPageCount: v.number(),
     embeddedChunkCount: v.optional(v.number()),
-    ocrGcsInputUri: v.optional(v.string()),
-    ocrGcsOutputPrefix: v.optional(v.string()),
-    ocrFinalJsonGcsUri: v.optional(v.string()),
   },
   returns: v.boolean(),
   handler: async (ctx, args) => {
@@ -442,23 +455,20 @@ export const completeProcessingSuccess = internalMutation({
       embeddingsCompletedAt: now,
       lastProcessedAt: now,
       ocrMethod: args.ocrMethod,
-      ocrProvider: "google_document_ai",
-      ocrModelOrProcessor: args.ocrModelOrProcessor,
+      ocrProvider: "mistral",
+      ocrModel: args.ocrModel,
+      ...(args.mistralFileId !== undefined
+        ? { mistralFileId: args.mistralFileId }
+        : {}),
+      ...(args.ocrResultStorageId !== undefined
+        ? { ocrResultStorageId: args.ocrResultStorageId }
+        : {}),
       embeddingModel: args.embeddingModel,
       summaryModel: args.summaryModel,
       documentSummary: args.documentSummary,
       embeddedPageCount: args.embeddedPageCount,
       ...(args.embeddedChunkCount !== undefined
         ? { embeddedChunkCount: args.embeddedChunkCount }
-        : {}),
-      ...(args.ocrGcsInputUri !== undefined
-        ? { ocrGcsInputUri: args.ocrGcsInputUri }
-        : {}),
-      ...(args.ocrGcsOutputPrefix !== undefined
-        ? { ocrGcsOutputPrefix: args.ocrGcsOutputPrefix }
-        : {}),
-      ...(args.ocrFinalJsonGcsUri !== undefined
-        ? { ocrFinalJsonGcsUri: args.ocrFinalJsonGcsUri }
         : {}),
     });
 
@@ -472,8 +482,7 @@ export const completeProcessingFailure = internalMutation({
     attemptNumber: v.number(),
     errorMessage: v.string(),
     ocrMethod: v.optional(ocrMethodValidator),
-    ocrGcsInputUri: v.optional(v.string()),
-    ocrGcsOutputPrefix: v.optional(v.string()),
+    mistralFileId: v.optional(v.string()),
   },
   returns: v.boolean(),
   handler: async (ctx, args) => {
@@ -491,11 +500,8 @@ export const completeProcessingFailure = internalMutation({
       processingError: args.errorMessage,
       lastProcessedAt: Date.now(),
       ...(args.ocrMethod !== undefined ? { ocrMethod: args.ocrMethod } : {}),
-      ...(args.ocrGcsInputUri !== undefined
-        ? { ocrGcsInputUri: args.ocrGcsInputUri }
-        : {}),
-      ...(args.ocrGcsOutputPrefix !== undefined
-        ? { ocrGcsOutputPrefix: args.ocrGcsOutputPrefix }
+      ...(args.mistralFileId !== undefined
+        ? { mistralFileId: args.mistralFileId }
         : {}),
     });
 
@@ -558,8 +564,8 @@ export const getOwnedDocument = internalQuery({
       title: v.string(),
       documentSummary: v.string(),
       originalFilename: v.string(),
-      ocrGcsInputUri: v.optional(v.string()),
-      ocrFinalJsonGcsUri: v.optional(v.string()),
+      fileStorageId: v.optional(v.id("_storage")),
+      ocrResultStorageId: v.optional(v.id("_storage")),
     }),
     v.null(),
   ),
@@ -580,11 +586,11 @@ export const getOwnedDocument = internalQuery({
       title: document.title,
       documentSummary: document.documentSummary,
       originalFilename: document.originalFilename,
-      ...(document.ocrGcsInputUri !== undefined
-        ? { ocrGcsInputUri: document.ocrGcsInputUri }
+      ...(document.fileStorageId !== undefined
+        ? { fileStorageId: document.fileStorageId }
         : {}),
-      ...(document.ocrFinalJsonGcsUri !== undefined
-        ? { ocrFinalJsonGcsUri: document.ocrFinalJsonGcsUri }
+      ...(document.ocrResultStorageId !== undefined
+        ? { ocrResultStorageId: document.ocrResultStorageId }
         : {}),
     };
   },

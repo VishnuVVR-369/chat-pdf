@@ -297,7 +297,7 @@ function DocsArticle({ page }: { page: DocsPage }) {
                   strokeWidth={1.8}
                 />
               </a>
-              <div className="mt-3 text-sm leading-7 text-stone-300 [&_a]:text-amber-200 [&_a]:underline [&_a]:decoration-amber-300/25 [&_a]:underline-offset-4 [&_:not(pre)>code]:rounded-md [&_:not(pre)>code]:bg-white/[0.06] [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:font-mono [&_:not(pre)>code]:text-xs [&_:not(pre)>code]:text-amber-100">
+              <div className="mt-3 text-sm leading-7 text-stone-300 [&_:not(pre)>code]:rounded-md [&_:not(pre)>code]:bg-white/[0.06] [&_:not(pre)>code]:px-1.5 [&_:not(pre)>code]:py-0.5 [&_:not(pre)>code]:font-mono [&_:not(pre)>code]:text-xs [&_:not(pre)>code]:text-amber-100 [&_a]:text-amber-200 [&_a]:underline [&_a]:decoration-amber-300/25 [&_a]:underline-offset-4">
                 {section.body}
               </div>
             </Reveal>

@@ -36,15 +36,16 @@ export type WorkspaceDocument = {
   ocrCompletedAt?: number;
   embeddingsCompletedAt?: number;
   lastProcessedAt?: number;
-  ocrMethod?: "document_ai_batch";
-  ocrProvider?: "google_document_ai";
-  ocrModelOrProcessor?: string;
+  fileStorageId?: Id<"_storage">;
+  ocrMethod?: "mistral_ocr";
+  ocrProvider?: "mistral";
+  ocrModel?: string;
+  mistralFileId?: string;
+  ocrResultStorageId?: Id<"_storage">;
   embeddingModel?: string;
   embeddedPageCount?: number;
   embeddedChunkCount?: number;
   fileUrl: string | null;
-  ocrGcsInputUri?: string;
-  ocrFinalJsonGcsUri?: string;
 };
 
 type SortMode = "recent" | "alpha";

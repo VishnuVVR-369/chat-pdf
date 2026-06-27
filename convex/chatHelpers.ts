@@ -1,6 +1,7 @@
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import { modelSupportsTemperature } from "./modelCapabilities";
 
 /* ─── Constants ─────────────────────────────────────────────────── */
 
@@ -524,7 +525,7 @@ async function fetchRoutingDecision(
     },
     body: JSON.stringify({
       model,
-      temperature: 0,
+      ...(modelSupportsTemperature(model) ? { temperature: 0 } : {}),
       response_format: routingDecisionFormat,
       messages: [
         {

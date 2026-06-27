@@ -79,7 +79,7 @@ export const usingChatPdfGroup: DocsGroup = {
             <p>
               Dashboard routes require an authenticated session. Public users
               can see the landing page and docs, while document data stays
-              behind Better Auth and Convex authorization checks. See{" "}
+              behind Clerk and Convex authorization checks. See{" "}
               <Link href="/docs/platform/authentication">Authentication</Link>{" "}
               for the boundary details.
             </p>
@@ -103,16 +103,15 @@ export const usingChatPdfGroup: DocsGroup = {
               <BulletList
                 items={[
                   "Text-based PDFs and scanned PDFs — both are accepted.",
-                  "Up to 100 pages per document (the OCR batch limit).",
+                  "Up to 100 pages per document in this OCR pipeline.",
                   "Research papers, contracts, manuals, financial reports, and other long-form documents.",
                 ]}
               />
               <Callout type="warning" title="Every PDF is OCR'd">
                 Unlike many PDF tools, ChatPDF does not read embedded text
                 directly. <strong>All</strong> uploads — including text-based
-                PDFs — are processed through Google Document AI batch OCR. This
-                keeps one consistent extraction path and page-accurate offsets
-                for citations.
+                PDFs — are processed through Mistral OCR 4. This keeps one
+                consistent extraction path for scanned and native PDFs.
               </Callout>
             </>
           ),
@@ -133,12 +132,12 @@ export const usingChatPdfGroup: DocsGroup = {
                   {
                     title: "Upload",
                     description:
-                      "The file is stored in Cloud Storage and connected to a document record.",
+                      "The file is stored in Convex file storage and connected to a document record.",
                   },
                   {
                     title: "OCR",
                     description:
-                      "Google Document AI batch OCR extracts page text from the PDF.",
+                      "Mistral OCR 4 extracts page markdown from the PDF.",
                   },
                   {
                     title: "Chunk",
@@ -177,9 +176,8 @@ export const usingChatPdfGroup: DocsGroup = {
               </p>
               <Callout type="note" title="First places to check">
                 If a document lands in <code>failed</code>, verify service
-                credentials: the Convex deployment, OpenAI key, Document AI
-                processor, and the Cloud Storage bucket and prefixes are the
-                most common causes.
+                credentials: the Convex deployment, Clerk keys, OpenAI key, and
+                Mistral API key are the most common causes.
               </Callout>
             </>
           ),
@@ -304,11 +302,15 @@ export const usingChatPdfGroup: DocsGroup = {
                 pipeline. They are the verification layer for every answer,
                 especially when a question spans long or technical documents.
               </p>
-              <Callout type="check" title="Citations are validated, not trusted">
+              <Callout
+                type="check"
+                title="Citations are validated, not trusted"
+              >
                 In chunks mode, each quote the model returns must be a verbatim,
-                contiguous substring of its cited chunk. Quotes that do not match
-                are dropped, and the citing page is resolved from the chunk’s
-                page spans. Up to four citations are attached per answer.
+                contiguous substring of its cited chunk. Quotes that do not
+                match are dropped, and the citing page is resolved from the
+                chunk’s page spans. Up to four citations are attached per
+                answer.
               </Callout>
             </>
           ),
@@ -364,10 +366,10 @@ export const usingChatPdfGroup: DocsGroup = {
           title: "OCR runs for every document",
           body: (
             <p>
-              ChatPDF sends every upload through Google Document AI batch OCR —
-              not only scanned files. For clean, text-based PDFs this is
-              transparent. For scanned or image-based PDFs, OCR quality becomes
-              the main factor in how well retrieval and citations work.
+              ChatPDF sends every upload through Mistral OCR 4 — not only
+              scanned files. For clean, text-based PDFs this is transparent. For
+              scanned or image-based PDFs, OCR quality becomes the main factor
+              in how well retrieval and citations work.
             </p>
           ),
         },
@@ -398,7 +400,7 @@ export const usingChatPdfGroup: DocsGroup = {
                 {
                   question: "What is the page limit?",
                   answer:
-                    "Batch OCR supports up to 100 pages per document. Larger files are rejected before processing starts.",
+                    "The OCR pipeline supports up to 100 pages per document. Larger files are rejected before processing starts.",
                 },
                 {
                   question: "A scanned table came out garbled — what now?",
@@ -414,10 +416,10 @@ export const usingChatPdfGroup: DocsGroup = {
           title: "Required configuration",
           body: (
             <p>
-              OCR depends on a Google Document AI project, location, processor,
-              and service account JSON, plus a Cloud Storage bucket with input
-              and output prefixes. See{" "}
-              <Link href="/docs/self-hosting/configuration">Configuration</Link>.
+              OCR depends on a Mistral API key. Uploaded PDFs and OCR JSON
+              artifacts are stored in Convex file storage. See{" "}
+              <Link href="/docs/self-hosting/configuration">Configuration</Link>
+              .
             </p>
           ),
         },

@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useAction, useConvexAuth, useQuery } from "convex/react";
+import { useClerk } from "@clerk/nextjs";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Menu01Icon } from "@hugeicons/core-free-icons";
-import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -48,13 +48,14 @@ function readRecentDocumentId(): string | null {
 
 export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   const router = useRouter();
+  const { signOut } = useClerk();
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const documents = useQuery(
     api.documents.listDocuments,
     isAuthenticated ? {} : "skip",
   );
-  const createDirectUploadTarget = useAction(
-    api.documentUploads.createDirectUploadTarget,
+  const createDirectUploadTarget = useMutation(
+    api.documentUploadTargets.createDirectUploadTarget,
   );
   const completeDirectUpload = useAction(
     api.documentUploads.completeDirectUpload,
@@ -193,7 +194,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     setIsSigningOut(true);
 
     try {
-      await authClient.signOut();
+      await signOut();
       router.push("/sign-in");
       router.refresh();
     } finally {
@@ -215,11 +216,20 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     });
 
     if (!uploadResponse.ok) {
-      throw new Error("Upload rejected by GCS.");
+      throw new Error("Upload rejected by Convex storage.");
+    }
+
+    const { storageId } = (await uploadResponse.json()) as {
+      storageId?: Id<"_storage">;
+    };
+
+    if (!storageId) {
+      throw new Error("Convex storage did not return a storage id.");
     }
 
     return await completeDirectUpload({
       documentId: directUploadTarget.documentId,
+      storageId,
     });
   };
 

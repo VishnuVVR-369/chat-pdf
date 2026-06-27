@@ -1,15 +1,21 @@
 "use client";
 
+import { useSignIn } from "@clerk/nextjs";
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { authClient } from "@/lib/auth-client";
 
 type Provider = "google" | "github";
 
+const PROVIDER_STRATEGY: Record<Provider, "oauth_google" | "oauth_github"> = {
+  google: "oauth_google",
+  github: "oauth_github",
+};
+
 export function AuthCard() {
+  const { signIn } = useSignIn();
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
@@ -19,17 +25,11 @@ export function AuthCard() {
     setError(null);
 
     try {
-      const result = await authClient.signIn.social({
-        provider,
-        callbackURL: "/dashboard",
-        newUserCallbackURL: "/dashboard",
-        requestSignUp: true,
+      await signIn.sso({
+        strategy: PROVIDER_STRATEGY[provider],
+        redirectUrl: "/dashboard",
+        redirectCallbackUrl: "/sso-callback",
       });
-
-      if (result.error) {
-        setError(result.error.message ?? "Authentication failed.");
-        setPendingProvider(null);
-      }
     } catch (authError) {
       setError(
         authError instanceof Error
@@ -78,6 +78,9 @@ export function AuthCard() {
             {error}
           </p>
         ) : null}
+
+        {/* Smart CAPTCHA mount point for Clerk's bot protection in custom flows. */}
+        <div id="clerk-captcha" className="mt-4 empty:mt-0" />
       </div>
     </motion.div>
   );

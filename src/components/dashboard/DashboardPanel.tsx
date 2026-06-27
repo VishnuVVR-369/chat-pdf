@@ -2,12 +2,18 @@
 
 import type { ChangeEvent } from "react";
 import { useEffect, useState } from "react";
-import { useAction, useConvex, useConvexAuth, useQuery } from "convex/react";
+import { useClerk } from "@clerk/nextjs";
+import {
+  useAction,
+  useConvex,
+  useConvexAuth,
+  useMutation,
+  useQuery,
+} from "convex/react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
-import { authClient } from "@/lib/auth-client";
 import { inspectPdfFile } from "@/lib/pdf-client";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -15,7 +21,7 @@ import type { Id } from "../../../convex/_generated/dataModel";
 type DashboardPanelProps = {
   email: string | null | undefined;
   name: string | null | undefined;
-  tokenIdentifier: string;
+  identityKey: string;
 };
 
 type ApiEvent = {
@@ -35,18 +41,19 @@ type PendingUpload = {
 
 export function DashboardPanel({
   email,
+  identityKey,
   name,
-  tokenIdentifier,
 }: DashboardPanelProps) {
   const router = useRouter();
+  const { signOut } = useClerk();
   const convex = useConvex();
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
   const documents = useQuery(
     api.documents.listDocuments,
     isAuthenticated ? {} : "skip",
   );
-  const createDirectUploadTarget = useAction(
-    api.documentUploads.createDirectUploadTarget,
+  const createDirectUploadTarget = useMutation(
+    api.documentUploadTargets.createDirectUploadTarget,
   );
   const completeDirectUpload = useAction(
     api.documentUploads.completeDirectUpload,
@@ -114,7 +121,7 @@ export function DashboardPanel({
     setIsSigningOut(true);
 
     try {
-      await authClient.signOut();
+      await signOut();
       router.push("/sign-in");
       router.refresh();
     } finally {
@@ -228,7 +235,7 @@ export function DashboardPanel({
       setLastUploadUrl(uploadTarget.uploadUrl);
       pushApiEvent(
         "createDirectUploadTarget",
-        "Signed GCS upload URL created.",
+        "Convex storage upload URL created.",
         "success",
       );
 
@@ -241,18 +248,27 @@ export function DashboardPanel({
       });
 
       if (!uploadResponse.ok) {
-        throw new Error("GCS rejected the PDF upload.");
+        throw new Error("Convex storage rejected the PDF upload.");
       }
 
-      setLastStorageId(uploadTarget.gcsUri);
+      const { storageId } = (await uploadResponse.json()) as {
+        storageId?: Id<"_storage">;
+      };
+
+      if (!storageId) {
+        throw new Error("Convex storage did not return a storage id.");
+      }
+
+      setLastStorageId(storageId);
       pushApiEvent(
-        "gcsUpload",
-        `Stored PDF as ${uploadTarget.gcsUri}.`,
+        "convexStorageUpload",
+        `Stored PDF as ${storageId}.`,
         "success",
       );
 
       const documentId = await completeDirectUpload({
         documentId: uploadTarget.documentId,
+        storageId,
       });
 
       setLastCreatedDocumentId(documentId);
@@ -294,10 +310,10 @@ export function DashboardPanel({
               </h1>
               <p className="max-w-3xl text-sm text-slate-600">
                 This dashboard is now a live test harness for the current Convex
-                document APIs. You can generate signed GCS upload URLs, upload a
-                PDF directly into the bucket, finalize the document record,
-                re-run `listDocuments`, and inspect the returned data in one
-                place.
+                document APIs. You can generate Convex storage upload URLs,
+                upload a PDF directly into file storage, finalize the document
+                record, re-run `listDocuments`, and inspect the returned data in
+                one place.
               </p>
             </div>
           </div>
@@ -413,7 +429,7 @@ export function DashboardPanel({
               }
             />
             <ApiResultCard
-              label="Last GCS URI"
+              label="Last storage id"
               value={lastStorageId ?? "No file stored yet"}
             />
             <ApiResultCard
@@ -426,7 +442,7 @@ export function DashboardPanel({
         <section className="grid gap-4 md:grid-cols-2">
           <InfoCard label="Display name" value={name ?? "No name returned"} />
           <InfoCard label="Email" value={email ?? "No email returned"} />
-          <InfoCard label="Identity key" value={tokenIdentifier} />
+          <InfoCard label="Identity key" value={identityKey} />
           <InfoCard
             label="Route policy"
             value="Unauthenticated requests to /dashboard are redirected to /sign-in."

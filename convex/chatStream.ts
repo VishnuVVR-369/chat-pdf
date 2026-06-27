@@ -1,6 +1,7 @@
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { modelSupportsTemperature } from "./modelCapabilities";
 import {
   MAX_HISTORY_MESSAGES,
   buildSummarySources,
@@ -52,7 +53,9 @@ async function streamStructuredAnswer(args: {
     body: JSON.stringify({
       model: args.model,
       messages: args.messages,
-      temperature: args.temperature,
+      ...(modelSupportsTemperature(args.model)
+        ? { temperature: args.temperature }
+        : {}),
       response_format: args.responseFormat,
       stream: true,
     }),

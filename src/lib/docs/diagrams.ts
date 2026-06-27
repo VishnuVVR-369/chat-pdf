@@ -8,14 +8,12 @@
  * - convex/schema.ts               (data model + vector/text indexes)
  */
 
-const OK_NODE =
-  "classDef okNode fill:#0e1f15,stroke:#34d399,color:#d1fae5;";
-const BAD_NODE =
-  "classDef badNode fill:#23100f,stroke:#f87171,color:#fecaca;";
+const OK_NODE = "classDef okNode fill:#0e1f15,stroke:#34d399,color:#d1fae5;";
+const BAD_NODE = "classDef badNode fill:#23100f,stroke:#f87171,color:#fecaca;";
 
 export const ingestionPipelineDiagram = `flowchart TB
-  U(["PDF uploaded"]) --> S["Stored in Cloud Storage<br/>+ document record created"]
-  S --> O["Google Document AI<br/>batch OCR · every PDF · ≤ 100 pages"]
+  U(["PDF uploaded"]) --> S["Stored in Convex file storage<br/>+ document record created"]
+  S --> O["Mistral OCR 4<br/>OCR · every PDF · ≤ 100 pages"]
   O --> X["Extract page text<br/>from OCR output"]
   X --> C["Chunk text<br/>~450 words · 75 overlap<br/>page spans kept for citations"]
   C --> E["Embed chunks<br/>text-embedding-3-small · 1536-dim"]
@@ -67,10 +65,10 @@ export const systemArchitectureDiagram = `flowchart LR
   FN --> DB
   HTTP --> DB
   JOB --> DB
-  BA["Better Auth<br/>Google · GitHub"] --- NX
-  BA --- FN
-  JOB --> DAI["Google Document AI"]
-  JOB --> GCS["Cloud Storage"]
+  CL["Clerk<br/>Google · GitHub"] --- NX
+  CL --- FN
+  JOB --> MOCR["Mistral OCR 4"]
+  JOB --> FS["Convex file storage"]
   FN --> OAI["OpenAI<br/>embeddings · chat"]
   HTTP --> OAI
   NX -. "events" .-> PH["PostHog"]`;
@@ -102,8 +100,8 @@ export const authBoundariesDiagram = `flowchart TB
   V(["Visitor"]) --> Q{"Authenticated session?"}
   Q -->|"no"| PUB["Public<br/>landing · docs · sign-in"]
   Q -->|"yes"| PROT["Protected<br/>dashboard · documents · chat"]
-  PUB -. "sign in · Google / GitHub" .-> BA["Better Auth"]
-  BA --> ID["Convex identity<br/>tokenIdentifier"]
+  PUB -. "sign in · Google / GitHub" .-> CL["Clerk"]
+  CL --> ID["Convex identity<br/>tokenIdentifier"]
   ID --> PROT
   PROT --> CHK["Server-side checks<br/>ownerTokenIdentifier on every read"]
   class PROT okNode

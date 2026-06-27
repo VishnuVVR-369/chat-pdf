@@ -25,13 +25,7 @@ const proofPoints = [
   "Financial reports",
 ];
 
-const builtOn = [
-  "Convex",
-  "Next.js",
-  "OpenAI",
-  "Google Document AI",
-  "Better Auth",
-];
+const builtOn = ["Convex", "Next.js", "OpenAI", "Mistral OCR 4", "Clerk"];
 
 const features = [
   {

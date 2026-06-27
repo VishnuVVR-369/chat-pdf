@@ -35,7 +35,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
   steps.push({
     id: "upload",
     label: "Upload",
-    description: "PDF uploaded to cloud storage",
+    description: "PDF uploaded to Convex storage",
     status: uploadDone
       ? "completed"
       : document.status === "uploading"
@@ -67,7 +67,7 @@ function deriveSteps(document: WorkspaceDocument): PipelineStep[] {
     detail: ocrFailed
       ? (document.processingError ?? "OCR failed")
       : ocrDone
-        ? `${document.ocrModelOrProcessor ?? "Document AI"} · ${document.pageCount ?? "?"} pages processed`
+        ? `${document.ocrModel ?? "Mistral OCR"} · ${document.pageCount ?? "?"} pages processed`
         : ocrActive
           ? "Running OCR on document pages..."
           : "Waiting for upload to complete",

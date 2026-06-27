@@ -3,7 +3,6 @@ import {
   Analytics01Icon,
   Database01Icon,
   File01Icon,
-  Layers01Icon,
   Shield01Icon,
 } from "@hugeicons/core-free-icons";
 
@@ -39,7 +38,7 @@ export const selfHostingGroup: DocsGroup = {
                     "Database, generated API bindings, server functions, and background jobs.",
                 },
                 {
-                  title: "Better Auth",
+                  title: "Clerk",
                   icon: Shield01Icon,
                   description:
                     "Google and GitHub sessions for dashboard access.",
@@ -50,20 +49,14 @@ export const selfHostingGroup: DocsGroup = {
                   description: "Embeddings and grounded answer text.",
                 },
                 {
-                  title: "Google Document AI",
+                  title: "Mistral OCR",
                   icon: File01Icon,
-                  description: "Batch OCR for every uploaded PDF.",
+                  description: "OCR 4 extraction for every uploaded PDF.",
                 },
                 {
                   title: "PostHog",
                   icon: Analytics01Icon,
                   description: "Optional analytics for product events.",
-                },
-                {
-                  title: "Upstash Redis",
-                  icon: Layers01Icon,
-                  description:
-                    "Optional Redis REST credentials for rate limiting and queue-adjacent features.",
                 },
               ]}
             />
@@ -87,9 +80,9 @@ export const selfHostingGroup: DocsGroup = {
           body: (
             <Callout type="warning" title="Keep your URLs aligned">
               Keep <code>SITE_URL</code>, <code>NEXT_PUBLIC_SITE_URL</code>,
-              OAuth callback URLs, and the Convex site URL consistent. Mismatched
-              URLs are the most common reason local sign-in works while
-              production sign-in fails.
+              Clerk callback URLs, and the Convex site URL consistent.
+              Mismatched URLs are the most common reason local sign-in works
+              while production sign-in fails.
             </Callout>
           ),
         },
@@ -167,10 +160,9 @@ pnpm build`}</CodeBlock>
             <BulletList
               items={[
                 "Production Convex deployment is configured.",
-                "OAuth callback URLs point to the production domain.",
-                "Better Auth secret is set and not reused from examples.",
-                "OpenAI and Google Document AI credentials are present.",
-                "Google Cloud Storage bucket and prefixes exist.",
+                "Clerk callback URLs point to the production domain.",
+                "Clerk publishable and secret keys are configured.",
+                "OpenAI and Mistral credentials are present.",
                 "PostHog values are present if analytics should run.",
               ]}
             />

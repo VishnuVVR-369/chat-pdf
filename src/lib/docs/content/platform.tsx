@@ -57,7 +57,7 @@ export const platformGroup: DocsGroup = {
                     "Database, server functions, auth integration, background OCR jobs, and the chat HTTP action.",
                 },
                 {
-                  title: "Better Auth",
+                  title: "Clerk",
                   icon: Shield01Icon,
                   description:
                     "Google and GitHub authentication for protected dashboard access.",
@@ -66,7 +66,7 @@ export const platformGroup: DocsGroup = {
                   title: "AI services",
                   icon: AiMagicIcon,
                   description:
-                    "OpenAI powers embeddings and answers. Google Document AI handles OCR.",
+                    "OpenAI powers embeddings and answers. Mistral OCR 4 handles OCR.",
                 },
               ]}
             />
@@ -80,8 +80,9 @@ export const platformGroup: DocsGroup = {
               <p>
                 The Next.js client subscribes to Convex queries and posts to a
                 Convex HTTP action for streaming chat. Convex owns the database
-                and calls external services — OpenAI, Document AI, and Cloud
-                Storage — from server functions and scheduled jobs.
+                and calls external services — OpenAI and Mistral OCR — from
+                server functions and scheduled jobs. Uploaded PDFs and OCR
+                artifacts stay in Convex file storage.
               </p>
               <Diagram
                 caption="Services and how they connect. Convex is the hub; external AI and storage are called from the backend, never the browser."
@@ -99,7 +100,7 @@ export const platformGroup: DocsGroup = {
                 {
                   title: "User uploads a PDF",
                   description:
-                    "The dashboard stores the file in Cloud Storage and creates the document record.",
+                    "The dashboard stores the file in Convex file storage and creates the document record.",
                 },
                 {
                   title: "Background processing starts",
@@ -121,9 +122,9 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                Chat runs through a Convex HTTP action that verifies the session,
-                routes the question, retrieves evidence, and streams a structured
-                answer back over Server-Sent Events.
+                Chat runs through a Convex HTTP action that verifies the
+                session, routes the question, retrieves evidence, and streams a
+                structured answer back over Server-Sent Events.
               </p>
               <Diagram
                 caption="A single chat request, end to end. Tokens stream to the UI while citations are validated and saved."
@@ -147,11 +148,11 @@ export const platformGroup: DocsGroup = {
           title: "Indexing",
           body: (
             <p>
-              Indexing transforms OCR-extracted pages into overlapping chunks, attaches
-              page-span metadata, and creates embeddings. Page and document
-              summaries are generated alongside the chunks. The goal is to
-              preserve enough page context for citations while keeping retrieval
-              precise.
+              Indexing transforms OCR-extracted pages into overlapping chunks,
+              attaches page-span metadata, and creates embeddings. Page and
+              document summaries are generated alongside the chunks. The goal is
+              to preserve enough page context for citations while keeping
+              retrieval precise.
             </p>
           ),
         },
@@ -179,9 +180,11 @@ export const platformGroup: DocsGroup = {
             <p>
               Hybrid retrieval combines semantic similarity with keyword
               matching. Vector search finds related meaning, while Convex
-              full-text search protects exact terms such as clause names, product
-              names, dates, and abbreviations. The{" "}
-              <Link href="/docs/platform/retrieval-ranking">Retrieval ranking</Link>{" "}
+              full-text search protects exact terms such as clause names,
+              product names, dates, and abbreviations. The{" "}
+              <Link href="/docs/platform/retrieval-ranking">
+                Retrieval ranking
+              </Link>{" "}
               page covers the exact weights and fusion math.
             </p>
           ),
@@ -250,8 +253,8 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                In chunks mode, two retrievers run against the document and their
-                results are unioned into a candidate set.
+                In chunks mode, two retrievers run against the document and
+                their results are unioned into a candidate set.
               </p>
               <BulletList
                 items={[
@@ -273,11 +276,15 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                Candidates are scored by their rank in each list using reciprocal
-                rank fusion, with the vector list weighted more heavily. A small
-                bonus rewards chunks that literally contain query terms.
+                Candidates are scored by their rank in each list using
+                reciprocal rank fusion, with the vector list weighted more
+                heavily. A small bonus rewards chunks that literally contain
+                query terms.
               </p>
-              <CodeBlock title="Scoring (per candidate)" language="ts">{`score(chunk) =
+              <CodeBlock
+                title="Scoring (per candidate)"
+                language="ts"
+              >{`score(chunk) =
     0.65 / (60 + vectorRank)     // semantic
   + 0.35 / (60 + lexicalRank)    // keyword
   + 0.10 * keywordOverlapRatio   // literal-term bonus
@@ -324,9 +331,9 @@ export const platformGroup: DocsGroup = {
                 ]}
               />
               <Callout type="check" title="Streaming, but verified">
-                The answer streams token-by-token as the structured JSON arrives,
-                while citations are validated from the complete response before
-                being attached to the saved message.
+                The answer streams token-by-token as the structured JSON
+                arrives, while citations are validated from the complete
+                response before being attached to the saved message.
               </Callout>
             </>
           ),
@@ -386,7 +393,7 @@ export const platformGroup: DocsGroup = {
                 ]}
               />
               <Diagram
-                caption="The auth boundary. Better Auth establishes a Convex identity; every data read is checked against the owner token."
+                caption="The auth boundary. Clerk establishes a Convex identity; every data read is checked against the owner token."
                 chart={authBoundariesDiagram}
               />
             </>
@@ -398,8 +405,8 @@ export const platformGroup: DocsGroup = {
           body: (
             <Callout type="warning" title="The backend is the source of truth">
               Convex functions treat the authenticated identity’s{" "}
-              <code>tokenIdentifier</code> as the server-side source of truth and
-              filter every document, page, chunk, and conversation by owner.
+              <code>tokenIdentifier</code> as the server-side source of truth
+              and filter every document, page, chunk, and conversation by owner.
               Client-side redirects improve the experience, but the backend
               checks protect the data boundary.
             </Callout>

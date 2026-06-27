@@ -31,12 +31,13 @@ ChatPDF is a customer-facing web application for uploading PDFs and chatting wit
 ### Backend
 
 - Convex for database, functions, and background jobs
-- Better Auth for authentication
+- Clerk for authentication
+- Convex file storage for uploaded PDFs and OCR artifacts
 
 ### AI and Processing
 
 - OpenAI for answer generation and embeddings
-- Google Document AI for OCR
+- Mistral OCR 4 for OCR
 - `pdfjs-dist` for PDF parsing
 
 ### Analytics
@@ -82,22 +83,33 @@ Copy `.env.example` to `.env.local` and provide values for:
 - `NEXT_PUBLIC_CONVEX_SITE_URL`
 - `SITE_URL`
 - `NEXT_PUBLIC_SITE_URL`
-- `BETTER_AUTH_SECRET`
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GITHUB_CLIENT_ID`
-- `GITHUB_CLIENT_SECRET`
-- `GOOGLE_DOCUMENTAI_SERVICE_ACCOUNT_JSON`
-- `GOOGLE_DOCUMENTAI_PROJECT_ID`
-- `GOOGLE_DOCUMENTAI_LOCATION`
-- `GOOGLE_DOCUMENTAI_PROCESSOR_ID`
-- `GOOGLE_DOCUMENTAI_GCS_BUCKET`
-- `GOOGLE_DOCUMENTAI_GCS_INPUT_PREFIX`
-- `GOOGLE_DOCUMENTAI_GCS_OUTPUT_PREFIX`
+- `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- `CLERK_SECRET_KEY`
+- `CLERK_JWT_ISSUER_DOMAIN`
+- `NEXT_PUBLIC_CLERK_SIGN_IN_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_UP_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`
+- `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL`
 - `OPENAI_API_KEY`
 - `OPENAI_EMBEDDING_MODEL`
+- `OPENAI_CHAT_MODEL`
+- `MISTRAL_API_KEY`
+- `MISTRAL_OCR_MODEL`
 - `NEXT_PUBLIC_POSTHOG_KEY`
 - `NEXT_PUBLIC_POSTHOG_HOST`
+
+### Clerk JWT template
+
+Convex authenticates requests using a Clerk JWT template named **`convex`**. In
+the Clerk dashboard, create a JWT template called `convex` (the Convex preset),
+and set `CLERK_JWT_ISSUER_DOMAIN` to the template's issuer URL. This matches
+`applicationID: "convex"` in `convex/auth.config.ts` and the
+`getToken({ template: "convex" })` call used by the chat stream. Without it,
+authenticated Convex queries and the `/api/chat/stream` endpoint return 401.
+
+> `OPENAI_CHAT_MODEL` defaults to a GPT-5-class model, which only accepts the
+> default sampling `temperature`. The code automatically omits `temperature` for
+> `gpt-5*`/`o*` models; older models (e.g. `gpt-4.1-mini`) still receive it.
 
 ## Local Development
 

@@ -2,18 +2,12 @@
 
 import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
-import { Redis } from "@upstash/redis";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
-import { createGoogleClients } from "./googleCloud";
 import { MAX_PDF_PAGES } from "../src/constants/pdf";
-
-const SIGNED_URL_TTL_SECONDS = 840; // 14 min — 60s safety margin before 15-min GCS expiry
-
-const DIRECT_UPLOAD_EXPIRY_MS = 30 * 60 * 1000;
 
 function isPasswordProtectedPdfError(error: unknown) {
   return (
@@ -44,136 +38,25 @@ async function readPdfPageCount(bytes: Uint8Array) {
 }
 
 async function discardReservedUpload(
-  ctx: Pick<ActionCtx, "runMutation">,
-  file: { delete(options: { ignoreNotFound: boolean }): Promise<unknown> },
+  ctx: Pick<ActionCtx, "runMutation" | "storage">,
+  storageId: Id<"_storage"> | null,
   documentId: Id<"documents">,
   ownerTokenIdentifier: string,
 ) {
-  await file.delete({ ignoreNotFound: true });
+  if (storageId) {
+    await ctx.storage.delete(storageId);
+  }
+
   await ctx.runMutation(internal.documents.deleteReservedDocument, {
     documentId,
     ownerTokenIdentifier,
   });
 }
 
-function buildObjectName(
-  prefix: string,
-  documentId: Id<"documents">,
-  filename: string,
-) {
-  const safeFilename = filename.replace(/[^a-zA-Z0-9._-]+/g, "_");
-  return `${prefix}/${documentId}/${safeFilename}`;
-}
-
-function parseGcsUri(uri: string) {
-  const match = /^gs:\/\/([^/]+)\/(.+)$/.exec(uri);
-
-  if (!match) {
-    throw new Error("Invalid GCS URI.");
-  }
-
-  return {
-    bucketName: match[1],
-    objectName: match[2],
-  };
-}
-
-export const createDirectUploadTarget = action({
-  args: {
-    filename: v.string(),
-    contentType: v.optional(v.string()),
-  },
-  returns: v.object({
-    documentId: v.id("documents"),
-    uploadUrl: v.string(),
-    gcsUri: v.string(),
-    method: v.literal("PUT"),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    documentId: Id<"documents">;
-    uploadUrl: string;
-    gcsUri: string;
-    method: "PUT";
-  }> => {
-    const ownerTokenIdentifier = (await requireCurrentUser(ctx))
-      .tokenIdentifier;
-    const clients = createGoogleClients();
-    const documentId: Id<"documents"> = await ctx.runMutation(
-      internal.documents.reserveDirectUploadDocument,
-      {
-        filename: args.filename,
-        ownerTokenIdentifier,
-        ...(args.contentType !== undefined
-          ? { contentType: args.contentType }
-          : {}),
-      },
-    );
-
-    try {
-      const objectName = buildObjectName(
-        clients.inputPrefix,
-        documentId,
-        args.filename,
-      );
-      const gcsUri = `gs://${clients.bucketName}/${objectName}`;
-      const updatedDocument = await ctx.runMutation(
-        internal.documents.setReservedDocumentInputGcsUri,
-        {
-          documentId,
-          ownerTokenIdentifier,
-          ocrGcsInputUri: gcsUri,
-        },
-      );
-
-      if (!updatedDocument) {
-        throw new Error("Could not reserve the direct upload target.");
-      }
-
-      const [uploadUrl] = await clients.storageClient
-        .bucket(clients.bucketName)
-        .file(objectName)
-        .getSignedUrl({
-          version: "v4",
-          action: "write",
-          expires: Date.now() + 15 * 60 * 1000,
-          contentType: args.contentType ?? "application/pdf",
-        });
-
-      await ctx.scheduler.runAfter(
-        DIRECT_UPLOAD_EXPIRY_MS,
-        internal.documentUploads.expireDirectUploadReservation,
-        {
-          documentId,
-          ownerTokenIdentifier,
-          gcsUri,
-        },
-      );
-
-      return {
-        documentId,
-        uploadUrl,
-        gcsUri,
-        method: "PUT",
-      };
-    } catch (error) {
-      await ctx.runMutation(internal.documents.deleteReservedDocument, {
-        documentId,
-        ownerTokenIdentifier,
-      });
-
-      throw error;
-    }
-  },
-});
-
 export const expireDirectUploadReservation = internalAction({
   args: {
     documentId: v.id("documents"),
     ownerTokenIdentifier: v.string(),
-    gcsUri: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -185,17 +68,10 @@ export const expireDirectUploadReservation = internalAction({
     if (
       !document ||
       document.status !== "uploading" ||
-      document.ocrGcsInputUri !== args.gcsUri
+      document.fileStorageId !== undefined
     ) {
       return null;
     }
-
-    const { storageClient } = createGoogleClients();
-    const { bucketName, objectName } = parseGcsUri(args.gcsUri);
-    await storageClient
-      .bucket(bucketName)
-      .file(objectName)
-      .delete({ ignoreNotFound: true });
 
     await ctx.runMutation(internal.documents.deleteReservedDocument, {
       documentId: args.documentId,
@@ -209,42 +85,51 @@ export const expireDirectUploadReservation = internalAction({
 export const completeDirectUpload = action({
   args: {
     documentId: v.id("documents"),
+    storageId: v.id("_storage"),
   },
   returns: v.id("documents"),
   handler: async (ctx, args): Promise<Id<"documents">> => {
     const ownerTokenIdentifier = (await requireCurrentUser(ctx))
       .tokenIdentifier;
-    const clients = createGoogleClients();
     const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
       documentId: args.documentId,
       ownerTokenIdentifier,
     });
 
-    if (!document?.ocrGcsInputUri) {
-      throw new Error("Uploaded PDF could not be found in GCS.");
+    if (!document || document.status !== "uploading") {
+      throw new Error("Upload reservation could not be found.");
     }
 
-    const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
-    const file = clients.storageClient.bucket(bucketName).file(objectName);
-    const [metadata] = await file.getMetadata();
-    const [contents] = await file.download();
+    const pdfBlob = await ctx.storage.get(args.storageId);
 
-    if (!contents || contents.length === 0) {
+    if (!pdfBlob) {
       await discardReservedUpload(
         ctx,
-        file,
+        null,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+      throw new Error("Uploaded PDF could not be found in Convex storage.");
+    }
+
+    const contents = new Uint8Array(await pdfBlob.arrayBuffer());
+
+    if (contents.length === 0) {
+      await discardReservedUpload(
+        ctx,
+        args.storageId,
         args.documentId,
         ownerTokenIdentifier,
       );
       throw new Error("Uploaded PDF is empty.");
     }
 
-    const signature = contents.subarray(0, 5).toString("utf-8");
+    const signature = Buffer.from(contents.subarray(0, 5)).toString("utf-8");
 
     if (signature !== "%PDF-") {
       await discardReservedUpload(
         ctx,
-        file,
+        args.storageId,
         args.documentId,
         ownerTokenIdentifier,
       );
@@ -265,8 +150,9 @@ export const completeDirectUpload = action({
         {
           documentId: args.documentId,
           ownerTokenIdentifier,
-          contentType: metadata.contentType ?? "application/pdf",
-          storageSize: Number(metadata.size ?? contents.length),
+          fileStorageId: args.storageId,
+          contentType: pdfBlob.type || "application/pdf",
+          storageSize: pdfBlob.size || contents.length,
           sha256: createHash("sha256").update(contents).digest("hex"),
           pageCount,
         },
@@ -280,7 +166,7 @@ export const completeDirectUpload = action({
     } catch (error) {
       await discardReservedUpload(
         ctx,
-        file,
+        args.storageId,
         args.documentId,
         ownerTokenIdentifier,
       );
@@ -311,33 +197,10 @@ export const getDocumentPdfUrl = action({
       ownerTokenIdentifier,
     });
 
-    if (!document?.ocrGcsInputUri) {
+    if (!document?.fileStorageId) {
       return null;
     }
 
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    });
-
-    const cacheKey = `pdf_url:${args.documentId}`;
-    const cached = await redis.get<string>(cacheKey);
-    if (cached) {
-      return cached;
-    }
-
-    const { storageClient } = createGoogleClients();
-    const { bucketName, objectName } = parseGcsUri(document.ocrGcsInputUri);
-    const [signedUrl] = await storageClient
-      .bucket(bucketName)
-      .file(objectName)
-      .getSignedUrl({
-        action: "read",
-        expires: Date.now() + 15 * 60 * 1000,
-      });
-
-    await redis.set(cacheKey, signedUrl, { ex: SIGNED_URL_TTL_SECONDS });
-
-    return signedUrl;
+    return await ctx.storage.getUrl(document.fileStorageId);
   },
 });

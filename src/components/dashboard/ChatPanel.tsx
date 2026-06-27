@@ -2,6 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
@@ -14,7 +15,6 @@ import {
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { Streamdown } from "streamdown";
-import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -64,6 +64,12 @@ type ChatMessageItem = {
   pending?: boolean;
   role: "user" | "assistant";
   streaming?: boolean;
+};
+
+type ConversationListItem = {
+  _id: Id<"conversations">;
+  title: string;
+  createdAt: number;
 };
 
 /* ─── Constants ─────────────────────────────────────────────────────── */
@@ -169,7 +175,7 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const conversations = useQuery(api.chatData.listConversationsForDocument, {
     documentId: document._id,
-  });
+  }) as ConversationListItem[] | undefined;
   const [selectedConversation, setSelectedConversation] = useState<
     Id<"conversations"> | "new" | null
   >(null);
@@ -333,10 +339,11 @@ function ChatBody({
   onCitationSelect?: (pageNumber: number) => void;
   onConversationCreated: (id: Id<"conversations">) => void;
 }) {
+  const { getToken, sessionClaims } = useAuth();
   const messages = useQuery(
     api.chatData.getConversationMessages,
     conversationId ? { conversationId } : "skip",
-  );
+  ) as ConversationMessage[] | undefined;
   const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -398,16 +405,13 @@ function ChatBody({
     });
 
     try {
-      const { data: tokenData } = await (
-        authClient as unknown as {
-          convex: {
-            token: (
-              opts: object,
-            ) => Promise<{ data: { token: string } | null }>;
-          };
-        }
-      ).convex.token({ fetchOptions: { throw: false } });
-      const token = tokenData?.token ?? null;
+      // Match ConvexProviderWithClerk: use Clerk's native Convex session token
+      // when its audience is already "convex", otherwise fall back to a JWT
+      // template named "convex".
+      const token =
+        sessionClaims?.aud === "convex"
+          ? await getToken()
+          : await getToken({ template: "convex" });
       const siteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
       if (!siteUrl)
         throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is not configured");

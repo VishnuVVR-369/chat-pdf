@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Figtree } from "next/font/google";
 import "./globals.css";
+import { ClerkProvider } from "@clerk/nextjs";
 import { cn } from "@/lib/utils";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 
 const figtree = Figtree({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -35,7 +37,9 @@ export default function RootLayout({
       )}
     >
       <body className="flex min-h-full flex-col">
-        {children}
+        <ClerkProvider>
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </ClerkProvider>
         <Analytics />
         <SpeedInsights />
       </body>

@@ -1,18 +1,18 @@
+import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { DashboardWorkspace } from "@/components/dashboard/DashboardWorkspace";
-import { fetchAuthQuery, isAuthenticated } from "@/lib/auth-server";
-import { api } from "../../../convex/_generated/api";
 
 export default async function DashboardPage() {
-  if (!(await isAuthenticated())) {
-    redirect("/sign-in");
-  }
-
-  const user = await fetchAuthQuery(api.auth.getCurrentUser);
+  const user = await currentUser();
 
   if (!user) {
     redirect("/sign-in");
   }
 
-  return <DashboardWorkspace email={user.email} name={user.name} />;
+  const email =
+    user.primaryEmailAddress?.emailAddress ??
+    user.emailAddresses[0]?.emailAddress;
+  const name = user.fullName ?? user.username ?? user.firstName;
+
+  return <DashboardWorkspace email={email} name={name} />;
 }

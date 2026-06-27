@@ -36,7 +36,7 @@ export const getStartedGroup: DocsGroup = {
       quickFacts: [
         { label: "Frontend", value: "Next.js App Router" },
         { label: "Backend", value: "Convex" },
-        { label: "Auth", value: "Better Auth" },
+        { label: "Auth", value: "Clerk" },
       ],
       highlights: [
         {
@@ -54,7 +54,7 @@ export const getStartedGroup: DocsGroup = {
         {
           title: "Self-host the app",
           description:
-            "Wire up Convex, Better Auth, OpenAI, Document AI, and storage.",
+            "Wire up Convex, Clerk, OpenAI, Mistral OCR, and storage.",
           href: "/docs/self-hosting/configuration",
         },
       ],
@@ -83,7 +83,7 @@ export const getStartedGroup: DocsGroup = {
                     title: "For builders",
                     icon: CpuIcon,
                     description:
-                      "Run it on Next.js, Convex, Better Auth, OpenAI, and Google Document AI.",
+                      "Run it on Next.js, Convex, Clerk, OpenAI, and Mistral OCR.",
                   },
                 ]}
               />
@@ -110,7 +110,7 @@ export const getStartedGroup: DocsGroup = {
                   {
                     title: "Process the document",
                     description:
-                      "Every file is OCR'd with Google Document AI, then chunked, embedded, and summarized.",
+                      "Every file is OCR'd with Mistral OCR 4, then chunked, embedded, and summarized.",
                   },
                   {
                     title: "Ask questions",
@@ -143,7 +143,7 @@ export const getStartedGroup: DocsGroup = {
                 called from Convex.
               </p>
               <Diagram
-                caption="High-level architecture. Convex coordinates everything; OpenAI, Document AI, and Cloud Storage are called from the backend."
+                caption="High-level architecture. Convex coordinates everything; OpenAI and Mistral OCR are called from the backend while PDFs stay in Convex storage."
                 chart={systemArchitectureDiagram}
               />
             </>
@@ -214,8 +214,8 @@ export const getStartedGroup: DocsGroup = {
                   "Node 24.10 or newer.",
                   "pnpm matching the workspace package manager.",
                   "A Convex deployment for the database, functions, and background jobs.",
-                  "OAuth credentials for Google or GitHub sign-in.",
-                  "OpenAI and Google Document AI credentials for indexing and answers.",
+                  "A Clerk dev application with Google or GitHub social sign-in enabled.",
+                  "OpenAI and Mistral credentials for indexing and answers.",
                 ]}
               />
             </>

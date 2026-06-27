@@ -10,7 +10,8 @@ const documentStatus = v.union(
 );
 
 const extractionMethod = v.literal("ocr");
-const ocrMethod = v.literal("document_ai_batch");
+const ocrMethod = v.literal("mistral_ocr");
+const ocrProvider = v.literal("mistral");
 
 export default defineSchema({
   documents: defineTable({
@@ -22,6 +23,7 @@ export default defineSchema({
     storageContentType: v.optional(v.string()),
     storageSize: v.number(),
     sha256: v.string(),
+    fileStorageId: v.optional(v.id("_storage")),
     status: documentStatus,
     pageCount: v.optional(v.number()),
     processingError: v.optional(v.string()),
@@ -32,14 +34,13 @@ export default defineSchema({
     lastProcessedAt: v.optional(v.number()),
     processingAttemptCount: v.optional(v.number()),
     ocrMethod: v.optional(ocrMethod),
-    ocrProvider: v.optional(v.literal("google_document_ai")),
-    ocrModelOrProcessor: v.optional(v.string()),
+    ocrProvider: v.optional(ocrProvider),
+    ocrModel: v.optional(v.string()),
+    mistralFileId: v.optional(v.string()),
+    ocrResultStorageId: v.optional(v.id("_storage")),
     embeddingModel: v.optional(v.string()),
     embeddedPageCount: v.optional(v.number()),
     embeddedChunkCount: v.optional(v.number()),
-    ocrGcsInputUri: v.optional(v.string()),
-    ocrGcsOutputPrefix: v.optional(v.string()),
-    ocrFinalJsonGcsUri: v.optional(v.string()),
   })
     .index("by_ownerTokenIdentifier", ["ownerTokenIdentifier"])
     .index("by_ownerTokenIdentifier_and_status", [
