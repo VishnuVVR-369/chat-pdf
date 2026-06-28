@@ -220,10 +220,10 @@ export const getStartedGroup: DocsGroup = {
                 ]}
               />
               <Callout type="tip" title="Clerk JWT template">
-                Before filling in the env file, go to your Clerk dashboard →
-                JWT Templates and create a template named <code>convex</code>{" "}
-                with your Convex deployment URL as the audience. Copy the
-                issuer URL — that is your <code>CLERK_JWT_ISSUER_DOMAIN</code>.
+                Before filling in the env file, go to your Clerk dashboard → JWT
+                Templates and create a template named <code>convex</code> with
+                your Convex deployment URL as the audience. Copy the issuer URL
+                — that is your <code>CLERK_JWT_ISSUER_DOMAIN</code>.
               </Callout>
             </>
           ),

@@ -437,7 +437,10 @@ export const platformGroup: DocsGroup = {
                 <code>ownerTokenIdentifier</code> — so users can only read and
                 write their own documents.
               </p>
-              <Callout type="warning" title="The backend is the source of truth">
+              <Callout
+                type="warning"
+                title="The backend is the source of truth"
+              >
                 Client-side redirects improve the experience but are not the
                 security layer. The Convex backend re-checks the authenticated
                 identity on every request. Even if a client-side redirect is
