@@ -4,17 +4,37 @@ import { useEffect, useRef, useState } from "react";
 import {
   getDocument,
   GlobalWorkerOptions,
+  TextLayer,
 } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/types/src/pdf";
 
 type PdfPreviewProps = {
   file?: File | null;
+  highlightQuote?: string | null;
+  highlightRatio?: number | null;
   onPageCountChange?: (pageCount: number) => void;
   pageNumber: number;
   url?: string | null;
 };
 
+type TextLayerData = {
+  divs: HTMLElement[];
+  itemStrings: string[];
+};
+
+type TextIndexEntry = { divIndex: number; charOffset: number } | null;
+
+type HighlightBox = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
 const PREVIEW_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000];
+const SOFT_HYPHEN = /­/g;
+const MIN_PREFIX_FALLBACK = 12;
+const MAX_PREFIX_FALLBACK = 40;
 
 let workerConfigured = false;
 
@@ -55,20 +75,208 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/* ─── Citation highlight matching ────────────────────────────────── */
+
+function normalizeForMatch(text: string) {
+  return text
+    .normalize("NFKC")
+    .replace(SOFT_HYPHEN, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Builds a normalized page string with a parallel map from each normalized character
+// back to its source text item + character offset. Collapsed/synthetic whitespace maps
+// to `null` (no DOM rect). Normalization is applied per source character so the index
+// stays aligned to the original text nodes. `joinWithSpace` toggles whether adjacent
+// text items are separated by a space (handles words split across items either way).
+function buildTextIndex(itemStrings: string[], joinWithSpace: boolean) {
+  let normalized = "";
+  const map: TextIndexEntry[] = [];
+  let prevWasSpace = true;
+
+  const push = (char: string, entry: TextIndexEntry) => {
+    normalized += char;
+    map.push(entry);
+  };
+
+  for (let divIndex = 0; divIndex < itemStrings.length; divIndex++) {
+    const source = itemStrings[divIndex];
+
+    if (joinWithSpace && divIndex > 0 && !prevWasSpace) {
+      push(" ", null);
+      prevWasSpace = true;
+    }
+
+    for (let i = 0; i < source.length; i++) {
+      const normChar = source[i]
+        .normalize("NFKC")
+        .replace(SOFT_HYPHEN, "")
+        .toLowerCase();
+
+      for (const ch of normChar) {
+        if (/\s/.test(ch)) {
+          if (!prevWasSpace) {
+            push(" ", { divIndex, charOffset: i });
+            prevWasSpace = true;
+          }
+        } else {
+          push(ch, { divIndex, charOffset: i });
+          prevWasSpace = false;
+        }
+      }
+    }
+  }
+
+  while (normalized.endsWith(" ")) {
+    normalized = normalized.slice(0, -1);
+    map.pop();
+  }
+
+  return { normalized, map };
+}
+
+// Finds the occurrence of `target` whose start position best matches `ratio` (0..1
+// position within the page), disambiguating repeated text. Returns -1 if not found.
+function findOccurrence(
+  normalized: string,
+  target: string,
+  ratio: number | null,
+): number {
+  if (normalized.length === 0) return -1;
+
+  const matches: number[] = [];
+  let from = 0;
+  while (matches.length < 64) {
+    const idx = normalized.indexOf(target, from);
+    if (idx === -1) break;
+    matches.push(idx);
+    from = idx + 1;
+  }
+
+  if (matches.length === 0) return -1;
+  if (matches.length === 1 || ratio == null) return matches[0];
+
+  const targetPos = ratio * normalized.length;
+  return matches.reduce((best, idx) =>
+    Math.abs(idx - targetPos) < Math.abs(best - targetPos) ? idx : best,
+  );
+}
+
+function computeHighlightBoxes(
+  data: TextLayerData,
+  wrapper: HTMLElement,
+  quote: string,
+  ratio: number | null,
+): HighlightBox[] {
+  const target = normalizeForMatch(quote);
+  if (target.length < 3) return [];
+
+  // Try joining adjacent text items with and then without a separating space, since a
+  // word can be split across pdf.js items either way.
+  let normalized = "";
+  let map: TextIndexEntry[] = [];
+  let startIdx = -1;
+  let matchLength = target.length;
+
+  for (const joinWithSpace of [true, false]) {
+    const index = buildTextIndex(data.itemStrings, joinWithSpace);
+    if (!index.normalized) continue;
+
+    let found = findOccurrence(index.normalized, target, ratio);
+    let length = target.length;
+
+    // Fall back to matching the opening slice when OCR text and the PDF's embedded
+    // text diverge (ligatures, hyphenation, reading order).
+    if (found === -1) {
+      const prefix = target.slice(0, MAX_PREFIX_FALLBACK);
+      if (prefix.length >= MIN_PREFIX_FALLBACK) {
+        found = findOccurrence(index.normalized, prefix, ratio);
+        length = prefix.length;
+      }
+    }
+
+    if (found !== -1) {
+      normalized = index.normalized;
+      map = index.map;
+      startIdx = found;
+      matchLength = length;
+      break;
+    }
+  }
+
+  if (startIdx === -1 || !normalized) return [];
+
+  const endIdx = Math.min(startIdx + matchLength, map.length);
+  const perDiv = new Map<number, { min: number; max: number }>();
+
+  for (let k = startIdx; k < endIdx; k++) {
+    const entry = map[k];
+    if (!entry) continue;
+    const current = perDiv.get(entry.divIndex);
+    if (!current) {
+      perDiv.set(entry.divIndex, {
+        min: entry.charOffset,
+        max: entry.charOffset,
+      });
+    } else {
+      current.min = Math.min(current.min, entry.charOffset);
+      current.max = Math.max(current.max, entry.charOffset);
+    }
+  }
+
+  const wrapperRect = wrapper.getBoundingClientRect();
+  const boxes: HighlightBox[] = [];
+
+  for (const [divIndex, { min, max }] of perDiv) {
+    const div = data.divs[divIndex];
+    const textNode = div?.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) continue;
+    const len = textNode.textContent?.length ?? 0;
+    if (len === 0) continue;
+
+    const range = document.createRange();
+    range.setStart(textNode, Math.min(min, len));
+    range.setEnd(textNode, Math.min(max + 1, len));
+
+    for (const rect of Array.from(range.getClientRects())) {
+      if (rect.width === 0 || rect.height === 0) continue;
+      boxes.push({
+        left: rect.left - wrapperRect.left,
+        top: rect.top - wrapperRect.top,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+  }
+
+  return boxes;
+}
+
+/* ─── Component ──────────────────────────────────────────────────── */
+
 export function PdfPreview({
   file,
+  highlightQuote,
+  highlightRatio,
   onPageCountChange,
   pageNumber,
   url,
 }: PdfPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textLayerRef = useRef<HTMLDivElement>(null);
+  const textLayerDataRef = useRef<TextLayerData | null>(null);
   const pageCountChangeRef = useRef(onPageCountChange);
   const [error, setError] = useState<string | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [isRenderingPage, setIsRenderingPage] = useState(false);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [textLayerVersion, setTextLayerVersion] = useState(0);
+  const [highlightBoxes, setHighlightBoxes] = useState<HighlightBox[]>([]);
 
   useEffect(() => {
     pageCountChangeRef.current = onPageCountChange;
@@ -189,10 +397,13 @@ export function PdfPreview({
     const activeDocument = pdfDocument;
     let cancelled = false;
     let renderTask: RenderTask | null = null;
+    let textLayer: TextLayer | null = null;
 
     async function renderPage() {
       setIsRenderingPage(true);
       setError(null);
+      textLayerDataRef.current = null;
+      setHighlightBoxes([]);
 
       try {
         const safePageNumber = Math.min(
@@ -207,8 +418,10 @@ export function PdfPreview({
 
         const canvas = canvasRef.current;
         const container = containerRef.current;
+        const wrapper = wrapperRef.current;
+        const textLayerEl = textLayerRef.current;
 
-        if (!canvas || !container) {
+        if (!canvas || !container || !wrapper || !textLayerEl) {
           return;
         }
 
@@ -244,6 +457,15 @@ export function PdfPreview({
         canvas.style.width = `${viewport.width}px`;
         canvas.style.height = `${viewport.height}px`;
 
+        // Size the overlay wrapper to the page and expose the scale factors the
+        // pdf.js text layer relies on for positioning/sizing.
+        wrapper.style.width = `${viewport.width}px`;
+        wrapper.style.height = `${viewport.height}px`;
+        wrapper.style.setProperty("--total-scale-factor", `${scale}`);
+        wrapper.style.setProperty("--scale-factor", `${scale}`);
+        wrapper.style.setProperty("--scale-round-x", "1px");
+        wrapper.style.setProperty("--scale-round-y", "1px");
+
         context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
         renderTask = pdfPage.render({
           canvas,
@@ -251,6 +473,34 @@ export function PdfPreview({
           viewport,
         });
         await renderTask.promise;
+
+        if (cancelled) {
+          return;
+        }
+
+        // Build a transparent, selectable text layer over the canvas so cited text
+        // can be located and highlighted.
+        textLayerEl.replaceChildren();
+        const textContent = await pdfPage.getTextContent();
+        if (cancelled) {
+          return;
+        }
+        textLayer = new TextLayer({
+          textContentSource: textContent,
+          container: textLayerEl,
+          viewport,
+        });
+        await textLayer.render();
+        if (cancelled) {
+          textLayer.cancel();
+          return;
+        }
+
+        textLayerDataRef.current = {
+          divs: textLayer.textDivs,
+          itemStrings: textLayer.textContentItemsStr,
+        };
+        setTextLayerVersion((version) => version + 1);
       } catch (renderError) {
         if (!cancelled) {
           setError(getPdfLoadErrorMessage(renderError));
@@ -267,8 +517,29 @@ export function PdfPreview({
     return () => {
       cancelled = true;
       renderTask?.cancel();
+      textLayer?.cancel();
     };
   }, [containerSize.height, containerSize.width, pageNumber, pdfDocument]);
+
+  // Recompute highlight boxes when the cited quote or the rendered text layer changes.
+  useEffect(() => {
+    const data = textLayerDataRef.current;
+    const wrapper = wrapperRef.current;
+
+    if (!data || !wrapper || !highlightQuote) {
+      setHighlightBoxes([]);
+      return;
+    }
+
+    setHighlightBoxes(
+      computeHighlightBoxes(
+        data,
+        wrapper,
+        highlightQuote,
+        highlightRatio ?? null,
+      ),
+    );
+  }, [highlightQuote, highlightRatio, textLayerVersion]);
 
   const isRendering = isLoadingDocument || isRenderingPage;
 
@@ -301,10 +572,27 @@ export function PdfPreview({
         ) : null}
 
         <div className="flex h-full w-full items-center justify-center overflow-hidden">
-          <canvas
-            ref={canvasRef}
-            className="block max-w-none rounded-sm bg-white shadow-[0_24px_70px_-40px_rgba(255,255,255,0.25)]"
-          />
+          <div ref={wrapperRef} className="relative">
+            <canvas
+              ref={canvasRef}
+              className="block max-w-none rounded-sm bg-white shadow-[0_24px_70px_-40px_rgba(255,255,255,0.25)]"
+            />
+            <div ref={textLayerRef} className="textLayer" />
+            <div className="pdf-highlight-layer" aria-hidden="true">
+              {highlightBoxes.map((box, index) => (
+                <div
+                  key={index}
+                  className="pdf-highlight-box"
+                  style={{
+                    left: `${box.left}px`,
+                    top: `${box.top}px`,
+                    width: `${box.width}px`,
+                    height: `${box.height}px`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

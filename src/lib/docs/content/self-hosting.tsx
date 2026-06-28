@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   AiMagicIcon,
   Analytics01Icon,
@@ -83,14 +84,14 @@ export const selfHostingGroup: DocsGroup = {
               <BulletList
                 items={[
                   "In your Clerk dashboard, go to JWT Templates and create a new template.",
-                  'Name it exactly convex — Convex looks for this template by name.',
+                  "Name it exactly convex — Convex looks for this template by name.",
                   "Set the audience claim to your Convex deployment URL (the value of NEXT_PUBLIC_CONVEX_URL).",
                   "Copy the issuer URL from the template and set it as CLERK_JWT_ISSUER_DOMAIN.",
                 ]}
               />
               <Callout type="warning" title="Template name must be convex">
-                Convex's auth integration expects the JWT template to be named{" "}
-                <code>convex</code> exactly. Any other name will cause
+                Convex&apos;s auth integration expects the JWT template to be
+                named <code>convex</code> exactly. Any other name will cause
                 authentication failures at the Convex backend, even if Clerk
                 sign-in itself works.
               </Callout>
@@ -105,9 +106,9 @@ export const selfHostingGroup: DocsGroup = {
               <p>
                 Copy the example file, then fill in deployment-specific values.
                 Every variable is documented on the{" "}
-                <a href="/docs/reference/environment-variables">
+                <Link href="/docs/reference/environment-variables">
                   Environment variables
-                </a>{" "}
+                </Link>{" "}
                 reference page.
               </p>
               <CodeBlock title="Create your env file">{`cp .env.example .env.local`}</CodeBlock>
@@ -118,12 +119,15 @@ export const selfHostingGroup: DocsGroup = {
           id: "site-urls",
           title: "Keep your URLs aligned",
           body: (
-            <Callout type="warning" title="URL mismatch is the most common setup failure">
+            <Callout
+              type="warning"
+              title="URL mismatch is the most common setup failure"
+            >
               <code>SITE_URL</code>, <code>NEXT_PUBLIC_SITE_URL</code>, the
-              Convex site URL, and Clerk's allowed callback URLs must all point
-              to the same origin. A mismatch is the most common reason local
-              sign-in works while production sign-in fails — or OAuth redirects
-              land on an error page.
+              Convex site URL, and Clerk&apos;s allowed callback URLs must all
+              point to the same origin. A mismatch is the most common reason
+              local sign-in works while production sign-in fails — or OAuth
+              redirects land on an error page.
             </Callout>
           ),
         },

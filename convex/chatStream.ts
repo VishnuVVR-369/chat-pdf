@@ -29,6 +29,17 @@ function sseEvent(data: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`);
 }
 
+function jsonError(status: number, error: string): Response {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+  });
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function getChatConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
@@ -42,10 +53,12 @@ async function streamStructuredAnswer(args: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   temperature: number;
   responseFormat: typeof structuredAnswerFormat | typeof summaryAnswerFormat;
+  signal?: AbortSignal;
   onToken: (token: string) => void;
 }) {
   const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal: args.signal,
     headers: {
       Authorization: `Bearer ${args.apiKey}`,
       "Content-Type": "application/json",
@@ -69,37 +82,45 @@ async function streamStructuredAnswer(args: {
   const reader = openaiRes.body.getReader();
   const decoder = new TextDecoder();
   let sseBuffer = "";
+  let aborted = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    sseBuffer += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      sseBuffer += decoder.decode(value, { stream: true });
 
-    const lines = sseBuffer.split("\n");
-    sseBuffer = lines.pop() ?? "";
+      const lines = sseBuffer.split("\n");
+      sseBuffer = lines.pop() ?? "";
 
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      const raw = line.slice("data: ".length).trim();
-      if (raw === "[DONE]") break;
-      let parsed: { choices?: Array<{ delta?: { content?: string } }> };
-      try {
-        parsed = JSON.parse(raw) as typeof parsed;
-      } catch {
-        continue;
-      }
-      const delta = parsed.choices?.[0]?.delta?.content ?? "";
-      if (!delta) continue;
-      const decoded = extractor.feed(delta);
-      if (decoded) {
-        args.onToken(decoded);
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const raw = line.slice("data: ".length).trim();
+        if (raw === "[DONE]") break;
+        let parsed: { choices?: Array<{ delta?: { content?: string } }> };
+        try {
+          parsed = JSON.parse(raw) as typeof parsed;
+        } catch {
+          continue;
+        }
+        const delta = parsed.choices?.[0]?.delta?.content ?? "";
+        if (!delta) continue;
+        const decoded = extractor.feed(delta);
+        if (decoded) {
+          args.onToken(decoded);
+        }
       }
     }
+  } catch (err) {
+    // A client-driven stop aborts the fetch; surface partial output rather than throw.
+    if (!isAbortError(err)) throw err;
+    aborted = true;
   }
 
   return {
     rawBuffer: extractor.rawBuffer,
     complete: extractor.complete,
+    aborted,
   };
 }
 
@@ -110,32 +131,45 @@ export const streamChat = httpAction(async (ctx, req) => {
 
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
+    return jsonError(401, "Unauthorized");
   }
   const ownerTokenIdentifier = identity.tokenIdentifier;
 
-  let body: { documentId: string; conversationId?: string; content: string };
+  let body: {
+    documentId: string;
+    conversationId?: string;
+    content?: string;
+    regenerate?: boolean;
+    expectedAssistantMessageId?: string;
+  };
   try {
     body = (await req.json()) as typeof body;
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
+    return jsonError(400, "Invalid JSON body");
   }
 
-  const { documentId, conversationId: rawConversationId, content } = body;
-  if (!documentId || !content) {
-    return new Response(
-      JSON.stringify({ error: "Missing documentId or content" }),
-      {
-        status: 400,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      },
-    );
+  const {
+    documentId,
+    conversationId: rawConversationId,
+    content,
+    regenerate,
+    expectedAssistantMessageId,
+  } = body;
+
+  const isRegenerate = regenerate === true;
+
+  if (!documentId) {
+    return jsonError(400, "Missing documentId");
+  }
+  if (isRegenerate) {
+    if (!rawConversationId || !expectedAssistantMessageId) {
+      return jsonError(
+        400,
+        "Regeneration requires conversationId and expectedAssistantMessageId",
+      );
+    }
+  } else if (!content) {
+    return jsonError(400, "Missing content");
   }
 
   const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
@@ -144,36 +178,23 @@ export const streamChat = httpAction(async (ctx, req) => {
   });
 
   if (!document) {
-    return new Response(JSON.stringify({ error: "Document not found" }), {
-      status: 404,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
+    return jsonError(404, "Document not found");
   }
 
   if (document.status !== "ready") {
-    return new Response(
-      JSON.stringify({ error: "Document is not ready for chat yet" }),
-      {
-        status: 400,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      },
-    );
+    return jsonError(400, "Document is not ready for chat yet");
   }
 
   if (document.documentSummary.trim().length === 0) {
-    return new Response(
-      JSON.stringify({ error: "Document is missing summary artifacts" }),
-      {
-        status: 500,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      },
-    );
+    return jsonError(500, "Document is missing summary artifacts");
   }
 
   let conversationId: Id<"conversations">;
-  const isNewConversation = !rawConversationId;
+  let assistantMessageId: Id<"messages">;
+  let queryContent: string;
+  const isNewConversation = !isRegenerate && !rawConversationId;
 
-  if (rawConversationId) {
+  if (isRegenerate) {
     const conversation = await ctx.runQuery(
       internal.chatData.getOwnedConversation,
       {
@@ -182,28 +203,58 @@ export const streamChat = httpAction(async (ctx, req) => {
       },
     );
     if (!conversation || conversation.documentId !== documentId) {
-      return new Response(JSON.stringify({ error: "Conversation not found" }), {
-        status: 404,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return jsonError(404, "Conversation not found");
     }
     conversationId = rawConversationId as Id<"conversations">;
+
+    const claim = await ctx.runMutation(internal.chatData.startRegeneration, {
+      conversationId,
+      expectedAssistantMessageId: expectedAssistantMessageId as Id<"messages">,
+      ownerTokenIdentifier,
+    });
+    if (!claim) {
+      return jsonError(409, "Nothing to regenerate");
+    }
+    assistantMessageId = claim.assistantMessageId;
+    queryContent = claim.userContent;
   } else {
-    conversationId = await ctx.runMutation(
-      internal.chatData.createConversation,
-      {
-        ownerTokenIdentifier,
-        documentId: documentId as Id<"documents">,
-        title: content,
-      },
+    queryContent = content as string;
+
+    if (rawConversationId) {
+      const conversation = await ctx.runQuery(
+        internal.chatData.getOwnedConversation,
+        {
+          conversationId: rawConversationId as Id<"conversations">,
+          ownerTokenIdentifier,
+        },
+      );
+      if (!conversation || conversation.documentId !== documentId) {
+        return jsonError(404, "Conversation not found");
+      }
+      conversationId = rawConversationId as Id<"conversations">;
+    } else {
+      conversationId = await ctx.runMutation(
+        internal.chatData.createConversation,
+        {
+          ownerTokenIdentifier,
+          documentId: documentId as Id<"documents">,
+          title: queryContent,
+        },
+      );
+    }
+
+    await ctx.runMutation(internal.chatData.addMessage, {
+      conversationId,
+      role: "user",
+      content: queryContent,
+      status: "complete",
+    });
+
+    assistantMessageId = await ctx.runMutation(
+      internal.chatData.createStreamingAssistantMessage,
+      { conversationId },
     );
   }
-
-  await ctx.runMutation(internal.chatData.addMessage, {
-    conversationId,
-    role: "user",
-    content,
-  });
 
   const history = await ctx.runQuery(internal.chatData.getConversationHistory, {
     conversationId,
@@ -217,19 +268,49 @@ export const streamChat = httpAction(async (ctx, req) => {
   });
 
   if (!hasChunkData) {
-    return new Response(
-      JSON.stringify({ error: "Document is missing retrieval chunks" }),
-      {
-        status: 500,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      },
-    );
+    await ctx.runMutation(internal.chatData.finalizeAssistantMessage, {
+      messageId: assistantMessageId,
+      content: "",
+      status: "failed",
+    });
+    return jsonError(500, "Document is missing retrieval chunks");
   }
+
+  const abort = new AbortController();
+
+  // Returns false once the user has stopped this generation so we can bail out of the
+  // expensive model call instead of finishing it.
+  const isStillStreaming = async () => {
+    const status = await ctx.runQuery(internal.chatData.getMessageStatus, {
+      messageId: assistantMessageId,
+    });
+    return status === "streaming";
+  };
+
+  const finalize = async (
+    finalContent: string,
+    citations:
+      | ReturnType<typeof buildValidatedChunkCitations>
+      | ReturnType<typeof buildValidatedSummaryCitations>,
+    status: "complete" | "stopped" = "complete",
+  ) => {
+    await ctx.runMutation(internal.chatData.finalizeAssistantMessage, {
+      messageId: assistantMessageId,
+      content: finalContent,
+      status,
+      citations: status === "complete" ? citations : [],
+    });
+  };
 
   const responseStream = new ReadableStream({
     async start(controller) {
       controller.enqueue(
-        sseEvent({ type: "meta", conversationId, isNew: isNewConversation }),
+        sseEvent({
+          type: "meta",
+          conversationId,
+          assistantMessageId,
+          isNew: isNewConversation,
+        }),
       );
 
       try {
@@ -237,8 +318,14 @@ export const streamChat = httpAction(async (ctx, req) => {
         const routing = await routeChatQuery({
           title: document.title,
           history: history.slice(0, -1),
-          currentUserMessage: content,
+          currentUserMessage: queryContent,
+          signal: abort.signal,
         });
+
+        if (!(await isStillStreaming())) {
+          controller.close();
+          return;
+        }
 
         if (routing.retrievalMode === "summaries") {
           const summaryContext = await ctx.runQuery(
@@ -278,6 +365,7 @@ export const streamChat = httpAction(async (ctx, req) => {
             messages: chatMessages,
             temperature: 0.1,
             responseFormat: summaryAnswerFormat,
+            signal: abort.signal,
             onToken: (token) =>
               controller.enqueue(sseEvent({ type: "token", token })),
           });
@@ -302,18 +390,22 @@ export const streamChat = httpAction(async (ctx, req) => {
               "I could not generate a response. Please try again.";
           }
 
+          if (streamed.aborted) {
+            // Client stopped: persist the partial as a terminal "stopped" message so
+            // we never leave a hidden streaming row and never overwrite with a full
+            // answer the user cancelled. (No-op if stopGeneration already ran.)
+            await finalize(assistantContent, [], "stopped");
+            controller.close();
+            return;
+          }
+
           if (!streamed.complete && assistantContent) {
             controller.enqueue(
               sseEvent({ type: "token", token: assistantContent }),
             );
           }
 
-          await ctx.runMutation(internal.chatData.addMessage, {
-            conversationId,
-            role: "assistant",
-            content: assistantContent,
-            citations,
-          });
+          await finalize(assistantContent, citations);
 
           controller.enqueue(
             sseEvent({ type: "done", content: assistantContent, citations }),
@@ -323,18 +415,19 @@ export const streamChat = httpAction(async (ctx, req) => {
             documentId: documentId as Id<"documents">,
             ownerTokenIdentifier,
             query: routing.standaloneQuery,
+            signal: abort.signal,
           });
+
+          if (!(await isStillStreaming())) {
+            controller.close();
+            return;
+          }
 
           if (chunks.length === 0) {
             const fallback =
               "I could not find enough evidence in this document to answer that question.";
             controller.enqueue(sseEvent({ type: "token", token: fallback }));
-            await ctx.runMutation(internal.chatData.addMessage, {
-              conversationId,
-              role: "assistant",
-              content: fallback,
-              citations: [],
-            });
+            await finalize(fallback, []);
             controller.enqueue(
               sseEvent({ type: "done", content: fallback, citations: [] }),
             );
@@ -357,6 +450,7 @@ export const streamChat = httpAction(async (ctx, req) => {
             messages: chatMessages,
             temperature: 0.1,
             responseFormat: structuredAnswerFormat,
+            signal: abort.signal,
             onToken: (token) =>
               controller.enqueue(sseEvent({ type: "token", token })),
           });
@@ -381,6 +475,15 @@ export const streamChat = httpAction(async (ctx, req) => {
               "I could not generate a response. Please try again.";
           }
 
+          if (streamed.aborted) {
+            // Client stopped: persist the partial as a terminal "stopped" message so
+            // we never leave a hidden streaming row and never overwrite with a full
+            // answer the user cancelled. (No-op if stopGeneration already ran.)
+            await finalize(assistantContent, [], "stopped");
+            controller.close();
+            return;
+          }
+
           // If the answer wasn't streamed (e.g. citations came first), emit it now
           if (!streamed.complete && assistantContent) {
             controller.enqueue(
@@ -388,24 +491,39 @@ export const streamChat = httpAction(async (ctx, req) => {
             );
           }
 
-          await ctx.runMutation(internal.chatData.addMessage, {
-            conversationId,
-            role: "assistant",
-            content: assistantContent,
-            citations,
-          });
+          await finalize(assistantContent, citations);
 
           controller.enqueue(
             sseEvent({ type: "done", content: assistantContent, citations }),
           );
         }
       } catch (err) {
+        if (isAbortError(err)) {
+          // Abort surfaced before streaming finished (e.g. during routing/retrieval).
+          // Mark the placeholder stopped so it never lingers as a hidden streaming row.
+          await ctx.runMutation(internal.chatData.finalizeAssistantMessage, {
+            messageId: assistantMessageId,
+            content: "",
+            status: "stopped",
+          });
+          controller.close();
+          return;
+        }
         const message =
           err instanceof Error ? err.message : "An error occurred";
+        await ctx.runMutation(internal.chatData.finalizeAssistantMessage, {
+          messageId: assistantMessageId,
+          content: "",
+          status: "failed",
+        });
         controller.enqueue(sseEvent({ type: "error", error: message }));
       }
 
       controller.close();
+    },
+    // Best-effort: if the runtime propagates client disconnect, stop the model call.
+    cancel() {
+      abort.abort();
     },
   });
 

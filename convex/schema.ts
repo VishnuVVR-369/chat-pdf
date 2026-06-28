@@ -119,6 +119,14 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
+    status: v.optional(
+      v.union(
+        v.literal("streaming"),
+        v.literal("complete"),
+        v.literal("stopped"),
+        v.literal("failed"),
+      ),
+    ),
     citations: v.optional(
       v.array(
         v.object({
@@ -130,6 +138,8 @@ export default defineSchema({
           quote: v.optional(v.string()),
           quoteStartOffset: v.optional(v.number()),
           quoteEndOffset: v.optional(v.number()),
+          pageQuote: v.optional(v.string()),
+          pageQuoteRatio: v.optional(v.number()),
         }),
       ),
     ),

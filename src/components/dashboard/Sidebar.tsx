@@ -7,13 +7,18 @@ import { DropdownMenu } from "radix-ui";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
+  ArrowReloadHorizontalIcon,
   Cancel01Icon,
+  Delete02Icon,
   Logout03Icon,
+  MoreVerticalIcon,
   Pdf01Icon,
+  PencilEdit01Icon,
   PlusSignIcon,
   Search01Icon,
   SidebarLeftIcon,
   StarsIcon,
+  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Input } from "@/components/ui/input";
@@ -56,7 +61,16 @@ type DocumentGroup = {
   docs: WorkspaceDocument[];
 };
 
-type SidebarProps = {
+type DocumentActionHandlers = {
+  onDeleteDocument: (id: Id<"documents">) => void | Promise<void>;
+  onRenameDocument: (
+    id: Id<"documents">,
+    title: string,
+  ) => void | Promise<void>;
+  onRetryDocument: (id: Id<"documents">) => void | Promise<void>;
+};
+
+type SidebarProps = DocumentActionHandlers & {
   collapsed: boolean;
   documents: WorkspaceDocument[];
   email: string | null | undefined;
@@ -119,12 +133,20 @@ export function Sidebar({
   isSigningOut,
   name,
   onCollapsedChange,
+  onDeleteDocument,
   onDocumentSelect,
+  onRenameDocument,
+  onRetryDocument,
   onSignOut,
   onUploadClick,
   recentDocumentId,
   selectedDocumentId,
 }: SidebarProps) {
+  const documentActions: DocumentActionHandlers = {
+    onDeleteDocument,
+    onRenameDocument,
+    onRetryDocument,
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
@@ -245,6 +267,7 @@ export function Sidebar({
               {filteredDocuments.map((doc) => (
                 <li key={doc._id}>
                   <DocumentRow
+                    {...documentActions}
                     collapsed
                     doc={doc}
                     isSelected={selectedDocumentId === doc._id}
@@ -329,6 +352,7 @@ export function Sidebar({
                     Continue
                   </p>
                   <DocumentRow
+                    {...documentActions}
                     collapsed={false}
                     doc={continueDoc}
                     isSelected={selectedDocumentId === continueDoc._id}
@@ -358,6 +382,7 @@ export function Sidebar({
                         {group.docs.map((doc) => (
                           <li key={doc._id}>
                             <DocumentRow
+                              {...documentActions}
                               collapsed={false}
                               doc={doc}
                               isSelected={selectedDocumentId === doc._id}
@@ -476,14 +501,30 @@ function DocumentRow({
   doc,
   eyebrow,
   isSelected,
+  onDeleteDocument,
+  onRenameDocument,
+  onRetryDocument,
   onSelect,
-}: {
+}: DocumentActionHandlers & {
   collapsed: boolean;
   doc: WorkspaceDocument;
   eyebrow?: ReactNode;
   isSelected: boolean;
   onSelect: (id: Id<"documents">) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(doc.title);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  const commitRename = () => {
+    const title = draft.trim();
+    if (title && title !== doc.title) {
+      void onRenameDocument(doc._id, title);
+    }
+    setIsEditing(false);
+  };
+
   return (
     <div className="relative">
       {isSelected && (
@@ -494,50 +535,199 @@ function DocumentRow({
         />
       )}
 
-      <button
-        className={cn(
-          "focus-ring group relative flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors duration-150",
-          isSelected
-            ? "bg-white/[0.05] text-stone-100"
-            : "text-stone-400 hover:bg-white/[0.04] hover:text-stone-200",
-          collapsed && "justify-center px-0",
-        )}
-        onClick={() => onSelect(doc._id)}
-        title={collapsed ? doc.title : undefined}
-        type="button"
-      >
-        <span
+      {isEditing && !collapsed ? (
+        <div className="flex items-center gap-1.5 rounded-lg bg-white/[0.05] px-2.5 py-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-stone-500">
+            <HugeiconsIcon icon={Pdf01Icon} size={14} strokeWidth={1.8} />
+          </span>
+          <input
+            autoFocus
+            className="min-w-0 flex-1 bg-transparent text-sm text-stone-100 outline-none"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                commitRename();
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setDraft(doc.title);
+                setIsEditing(false);
+              }
+            }}
+            onBlur={commitRename}
+          />
+          <button
+            aria-label="Save name"
+            className="focus-ring flex h-6 w-6 items-center justify-center rounded text-emerald-400/80 hover:text-emerald-300"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={commitRename}
+            type="button"
+          >
+            <HugeiconsIcon icon={Tick02Icon} size={13} strokeWidth={2} />
+          </button>
+        </div>
+      ) : (
+        <div
           className={cn(
-            "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+            "group relative flex items-center rounded-lg transition-colors duration-150",
             isSelected
-              ? "bg-gradient-to-br from-amber-500/20 to-orange-500/10 text-amber-400 shadow-[0_0_8px_-2px_rgba(245,158,11,0.2)]"
-              : "bg-white/[0.04] text-stone-500 group-hover:bg-white/[0.07] group-hover:text-stone-400",
+              ? "bg-white/[0.05] text-stone-100"
+              : "text-stone-400 hover:bg-white/[0.04] hover:text-stone-200",
           )}
         >
-          <HugeiconsIcon icon={Pdf01Icon} size={14} strokeWidth={1.8} />
-        </span>
+          <button
+            className={cn(
+              "focus-ring flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left",
+              collapsed && "justify-center px-0",
+            )}
+            onClick={() => onSelect(doc._id)}
+            title={collapsed ? doc.title : undefined}
+            type="button"
+          >
+            <span
+              className={cn(
+                "relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+                isSelected
+                  ? "bg-gradient-to-br from-amber-500/20 to-orange-500/10 text-amber-400 shadow-[0_0_8px_-2px_rgba(245,158,11,0.2)]"
+                  : "bg-white/[0.04] text-stone-500 group-hover:bg-white/[0.07] group-hover:text-stone-400",
+              )}
+            >
+              <HugeiconsIcon icon={Pdf01Icon} size={14} strokeWidth={1.8} />
+            </span>
 
-        {!collapsed && (
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1.5">
-              {eyebrow && <span className="text-amber-400/70">{eyebrow}</span>}
-              <span className="truncate text-sm leading-tight font-medium">
-                {doc.title}
+            {!collapsed && (
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  {eyebrow && (
+                    <span className="text-amber-400/70">{eyebrow}</span>
+                  )}
+                  <span className="truncate text-sm leading-tight font-medium">
+                    {doc.title}
+                  </span>
+                </span>
+                <span className="mt-1 flex items-center gap-1.5">
+                  <DocStatus status={doc.status} variant="dot" />
+                  <span className="truncate text-xs text-stone-500/80">
+                    {doc.pageCount
+                      ? `${doc.pageCount} pages`
+                      : doc.status === "ready"
+                        ? "Ready"
+                        : doc.status === "failed"
+                          ? "Failed"
+                          : "Processing"}
+                  </span>
+                </span>
               </span>
-            </span>
-            <span className="mt-1 flex items-center gap-1.5">
-              <DocStatus status={doc.status} variant="dot" />
-              <span className="truncate text-xs text-stone-500/80">
-                {doc.pageCount
-                  ? `${doc.pageCount} pages`
-                  : doc.status === "ready"
-                    ? "Ready"
-                    : "Processing"}
+            )}
+          </button>
+
+          {!collapsed && (
+            <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  aria-label="Document actions"
+                  className={cn(
+                    "focus-ring mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-stone-500 transition-all hover:bg-white/[0.06] hover:text-stone-200",
+                    menuOpen
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100",
+                  )}
+                  type="button"
+                >
+                  <HugeiconsIcon
+                    icon={MoreVerticalIcon}
+                    size={15}
+                    strokeWidth={1.8}
+                  />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  sideOffset={4}
+                  className="z-50 w-[180px] rounded-xl border border-white/[0.08] bg-[#111111] p-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+                >
+                  <DropdownMenu.Item
+                    className="focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-stone-300 transition-colors outline-none data-[highlighted]:bg-white/[0.05] data-[highlighted]:text-stone-100"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setDraft(doc.title);
+                      setIsEditing(true);
+                    }}
+                  >
+                    <HugeiconsIcon
+                      icon={PencilEdit01Icon}
+                      size={14}
+                      strokeWidth={1.8}
+                    />
+                    <span>Rename</span>
+                  </DropdownMenu.Item>
+                  {doc.status === "failed" && (
+                    <DropdownMenu.Item
+                      className="focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-stone-300 transition-colors outline-none data-[highlighted]:bg-white/[0.05] data-[highlighted]:text-stone-100"
+                      onSelect={(event) => {
+                        event.preventDefault();
+                        void onRetryDocument(doc._id);
+                      }}
+                    >
+                      <HugeiconsIcon
+                        icon={ArrowReloadHorizontalIcon}
+                        size={14}
+                        strokeWidth={1.8}
+                      />
+                      <span>Retry processing</span>
+                    </DropdownMenu.Item>
+                  )}
+                  <DropdownMenu.Separator className="my-1 h-px bg-white/[0.06]" />
+                  <DropdownMenu.Item
+                    className="focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-red-300/90 transition-colors outline-none data-[highlighted]:bg-red-500/[0.08] data-[highlighted]:text-red-200"
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      setIsConfirmingDelete(true);
+                    }}
+                  >
+                    <HugeiconsIcon
+                      icon={Delete02Icon}
+                      size={14}
+                      strokeWidth={1.8}
+                    />
+                    <span>Delete</span>
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          )}
+
+          {isConfirmingDelete && !collapsed && (
+            <div className="absolute inset-0 z-10 flex items-center justify-between gap-2 rounded-lg border border-red-500/20 bg-[#161616] px-2.5">
+              <span className="truncate text-xs text-stone-300">
+                Delete this PDF?
               </span>
-            </span>
-          </span>
-        )}
-      </button>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  className="focus-ring rounded-md bg-red-500/15 px-2 py-1 text-xs font-medium text-red-300 hover:bg-red-500/25"
+                  onClick={() => {
+                    setIsConfirmingDelete(false);
+                    void onDeleteDocument(doc._id);
+                  }}
+                  type="button"
+                >
+                  Delete
+                </button>
+                <button
+                  className="focus-ring rounded-md px-2 py-1 text-xs text-stone-400 hover:text-stone-200"
+                  onClick={() => setIsConfirmingDelete(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
