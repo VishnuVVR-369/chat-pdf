@@ -4,15 +4,19 @@ import { useState } from "react";
 import { PdfPreview } from "@/components/dashboard/PdfPreview";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { Id } from "../../../convex/_generated/dataModel";
 import type { WorkspaceDocument } from "./Sidebar";
 
 type PdfViewerProps = {
   document: WorkspaceDocument;
+  highlightQuote?: string | null;
+  highlightRatio?: number | null;
   localFile?: File | null;
   pageCount?: number | null;
   pageNumber?: number;
   onPageChange?: (page: number) => void;
   onPageCountChange?: (count: number) => void;
+  onRetry?: (id: Id<"documents">) => void | Promise<void>;
   resolvedFileUrl?: string | null;
 };
 
@@ -24,11 +28,14 @@ function formatFileSize(bytes: number) {
 
 export function PdfViewer({
   document,
+  highlightQuote,
+  highlightRatio,
   localFile,
   pageCount: externalPageCount,
   pageNumber: externalPageNumber,
   onPageChange,
   onPageCountChange,
+  onRetry,
   resolvedFileUrl,
 }: PdfViewerProps) {
   const [internalPageNumber, setInternalPageNumber] = useState(1);
@@ -168,14 +175,28 @@ export function PdfViewer({
 
       {/* Canvas */}
       <div className="flex-1 overflow-hidden bg-stone-950/50">
-        {document.status === "failed" && document.processingError && (
-          <div className="border-b border-red-950/60 bg-red-950/20 px-4 py-3 text-sm text-red-200">
-            {document.processingError}
+        {document.status === "failed" && (
+          <div className="flex items-center justify-between gap-3 border-b border-red-950/60 bg-red-950/20 px-4 py-3 text-sm text-red-200">
+            <span className="min-w-0 flex-1 truncate">
+              {document.processingError ?? "Processing failed."}
+            </span>
+            {onRetry && (
+              <Button
+                className="h-7 shrink-0 border-red-500/30 px-2.5 text-xs text-red-100 hover:bg-red-500/10"
+                onClick={() => void onRetry(document._id)}
+                size="xs"
+                variant="outline"
+              >
+                Retry
+              </Button>
+            )}
           </div>
         )}
         <div className="h-full">
           <PdfPreview
             file={localFile}
+            highlightQuote={highlightQuote}
+            highlightRatio={highlightRatio}
             onPageCountChange={handlePageCountChange}
             pageNumber={pageNumber}
             url={resolvedFileUrl ?? document.fileUrl}

@@ -3,15 +3,22 @@
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
+  ArrowReloadHorizontalIcon,
   ArrowUp01Icon,
+  Cancel01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  PencilEdit01Icon,
   PlusSignIcon,
   SparklesIcon,
+  StopCircleIcon,
+  Tick02Icon,
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { Streamdown } from "streamdown";
@@ -22,10 +29,16 @@ import type { WorkspaceDocument } from "./Sidebar";
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 
+type CitationTarget = {
+  pageNumber: number;
+  quote?: string;
+  quoteRatio?: number;
+};
+
 type ChatPanelProps = {
   document: WorkspaceDocument;
   currentPage?: number;
-  onCitationSelect?: (pageNumber: number) => void;
+  onCitationSelect?: (citation: CitationTarget) => void;
 };
 
 type Citation = {
@@ -37,20 +50,27 @@ type Citation = {
   quote?: string;
   quoteStartOffset?: number;
   quoteEndOffset?: number;
+  pageQuote?: string;
+  pageQuoteRatio?: number;
 };
+
+type MessageStatus = "streaming" | "complete" | "stopped" | "failed";
 
 type ConversationMessage = {
   _id: Id<"messages">;
   role: "user" | "assistant";
   content: string;
+  status?: MessageStatus;
   citations?: Citation[];
   createdAt: number;
 };
 
 type PendingExchange = {
   assistantContent: string;
+  assistantMessageId: Id<"messages"> | null;
   citations: Citation[];
   conversationId: Id<"conversations"> | null;
+  isRegenerate: boolean;
   isStreaming: boolean;
   submittedAt: number;
   userContent: string;
@@ -60,9 +80,11 @@ type ChatMessageItem = {
   citations?: Citation[];
   content: string;
   createdAt: number;
+  id?: Id<"messages">;
   key: string;
   pending?: boolean;
   role: "user" | "assistant";
+  status?: MessageStatus;
   streaming?: boolean;
 };
 
@@ -100,6 +122,10 @@ const SUGGESTED_PROMPTS: {
     build: (page) => `Explain page ${page ?? 1}`,
   },
 ];
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
 
 function normalizeAssistantContent(content: string) {
   const trimmed = content.trim();
@@ -149,23 +175,6 @@ function matchesPendingUser(
   );
 }
 
-function matchesPendingAssistant(
-  message: ConversationMessage,
-  pendingExchange: PendingExchange,
-) {
-  const normalizedMessageContent =
-    message.role === "assistant"
-      ? normalizeAssistantContent(message.content)
-      : message.content;
-
-  return (
-    message.role === "assistant" &&
-    pendingExchange.assistantContent.length > 0 &&
-    normalizedMessageContent === pendingExchange.assistantContent &&
-    isRecentPendingMatch(message.createdAt, pendingExchange.submittedAt)
-  );
-}
-
 /* ─── Main component ─────────────────────────────────────────────── */
 
 export function ChatPanel({
@@ -176,6 +185,8 @@ export function ChatPanel({
   const conversations = useQuery(api.chatData.listConversationsForDocument, {
     documentId: document._id,
   }) as ConversationListItem[] | undefined;
+  const renameConversation = useMutation(api.chatData.renameConversation);
+  const deleteConversation = useMutation(api.chatData.deleteConversation);
   const [selectedConversation, setSelectedConversation] = useState<
     Id<"conversations"> | "new" | null
   >(null);
@@ -191,6 +202,23 @@ export function ChatPanel({
   const handleNewConversation = () => {
     setSelectedConversation("new");
   };
+
+  const handleRenameConversation = useCallback(
+    (id: Id<"conversations">, title: string) => {
+      void renameConversation({ conversationId: id, title });
+    },
+    [renameConversation],
+  );
+
+  const handleDeleteConversation = useCallback(
+    (id: Id<"conversations">) => {
+      if (selectedConversation === id) {
+        setSelectedConversation("new");
+      }
+      void deleteConversation({ conversationId: id });
+    },
+    [deleteConversation, selectedConversation],
+  );
 
   const activeTitle = activeConversationId
     ? conversations?.find((c) => c._id === activeConversationId)?.title
@@ -217,6 +245,8 @@ export function ChatPanel({
             <ConversationSwitcher
               activeConversationId={activeConversationId}
               conversations={conversations}
+              onDelete={handleDeleteConversation}
+              onRename={handleRenameConversation}
               onSelect={(id) =>
                 setSelectedConversation(id as Id<"conversations">)
               }
@@ -252,21 +282,50 @@ export function ChatPanel({
 function ConversationSwitcher({
   activeConversationId,
   conversations,
+  onDelete,
+  onRename,
   onSelect,
   selectedConversation,
 }: {
   activeConversationId: Id<"conversations"> | null;
-  conversations: {
-    _id: Id<"conversations">;
-    title: string;
-    createdAt: number;
-  }[];
+  conversations: ConversationListItem[];
+  onDelete: (id: Id<"conversations">) => void;
+  onRename: (id: Id<"conversations">, title: string) => void;
   onSelect: (id: string) => void;
   selectedConversation: Id<"conversations"> | "new" | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<Id<"conversations"> | null>(null);
+  const [draft, setDraft] = useState("");
+  const [confirmingId, setConfirmingId] = useState<Id<"conversations"> | null>(
+    null,
+  );
+
+  const startEditing = (conv: ConversationListItem) => {
+    setConfirmingId(null);
+    setEditingId(conv._id);
+    setDraft(conv.title);
+  };
+
+  const commitEditing = () => {
+    if (editingId && draft.trim()) {
+      onRename(editingId, draft.trim());
+    }
+    setEditingId(null);
+    setDraft("");
+  };
+
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) {
+          setEditingId(null);
+          setConfirmingId(null);
+        }
+      }}
+    >
       <Popover.Trigger asChild>
         <button
           className={cn(
@@ -291,32 +350,151 @@ function ConversationSwitcher({
         <Popover.Content
           align="end"
           sideOffset={6}
-          className="z-50 w-[260px] rounded-xl border border-white/[0.08] bg-[#111111] p-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+          className="z-50 w-[280px] rounded-xl border border-white/[0.08] bg-[#111111] p-1.5 shadow-[0_20px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl"
         >
           <div className="mb-1 px-2.5 py-1.5 text-xs font-semibold tracking-[0.15em] text-stone-500 uppercase">
             Conversations
           </div>
-          <div className="max-h-[240px] overflow-y-auto">
-            {conversations.map((conv) => (
-              <button
-                key={conv._id}
-                className={cn(
-                  "focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
-                  selectedConversation !== "new" &&
-                    conv._id === activeConversationId
-                    ? "bg-amber-500/[0.08] text-amber-300"
-                    : "text-stone-400 hover:bg-white/[0.05] hover:text-stone-200",
-                )}
-                onClick={() => {
-                  onSelect(conv._id);
-                  setOpen(false);
-                }}
-                type="button"
-              >
-                <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-40" />
-                <span className="truncate">{conv.title.slice(0, 40)}</span>
-              </button>
-            ))}
+          <div className="max-h-[280px] overflow-y-auto">
+            {conversations.map((conv) => {
+              const isActive =
+                selectedConversation !== "new" &&
+                conv._id === activeConversationId;
+              const isEditing = editingId === conv._id;
+              const isConfirming = confirmingId === conv._id;
+
+              if (isEditing) {
+                return (
+                  <div
+                    key={conv._id}
+                    className="flex items-center gap-1 rounded-lg bg-white/[0.04] px-2 py-1.5"
+                  >
+                    <input
+                      autoFocus
+                      className="min-w-0 flex-1 bg-transparent text-xs text-stone-200 outline-none"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          commitEditing();
+                        }
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          setEditingId(null);
+                        }
+                      }}
+                    />
+                    <button
+                      aria-label="Save name"
+                      className="focus-ring flex h-6 w-6 items-center justify-center rounded text-emerald-400/80 hover:text-emerald-300"
+                      onClick={commitEditing}
+                      type="button"
+                    >
+                      <HugeiconsIcon
+                        icon={Tick02Icon}
+                        size={13}
+                        strokeWidth={2}
+                      />
+                    </button>
+                    <button
+                      aria-label="Cancel rename"
+                      className="focus-ring flex h-6 w-6 items-center justify-center rounded text-stone-500 hover:text-stone-300"
+                      onClick={() => setEditingId(null)}
+                      type="button"
+                    >
+                      <HugeiconsIcon
+                        icon={Cancel01Icon}
+                        size={12}
+                        strokeWidth={2}
+                      />
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={conv._id}
+                  className={cn(
+                    "group flex items-center gap-1 rounded-lg px-1 transition-colors",
+                    isActive ? "bg-amber-500/[0.08]" : "hover:bg-white/[0.05]",
+                  )}
+                >
+                  <button
+                    className={cn(
+                      "focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1.5 py-2 text-left text-xs transition-colors",
+                      isActive
+                        ? "text-amber-300"
+                        : "text-stone-400 group-hover:text-stone-200",
+                    )}
+                    onClick={() => {
+                      onSelect(conv._id);
+                      setOpen(false);
+                    }}
+                    type="button"
+                  >
+                    <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-40" />
+                    <span className="truncate">{conv.title.slice(0, 40)}</span>
+                  </button>
+
+                  {isConfirming ? (
+                    <div className="flex items-center gap-0.5 pr-1">
+                      <button
+                        aria-label="Confirm delete"
+                        className="focus-ring flex h-6 items-center rounded px-1.5 text-xs font-medium text-red-300 hover:text-red-200"
+                        onClick={() => {
+                          onDelete(conv._id);
+                          setConfirmingId(null);
+                        }}
+                        type="button"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        aria-label="Cancel delete"
+                        className="focus-ring flex h-6 w-6 items-center justify-center rounded text-stone-500 hover:text-stone-300"
+                        onClick={() => setConfirmingId(null)}
+                        type="button"
+                      >
+                        <HugeiconsIcon
+                          icon={Cancel01Icon}
+                          size={12}
+                          strokeWidth={2}
+                        />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-0.5 pr-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                      <button
+                        aria-label="Rename conversation"
+                        className="focus-ring flex h-6 w-6 items-center justify-center rounded text-stone-500 hover:text-stone-200"
+                        onClick={() => startEditing(conv)}
+                        type="button"
+                      >
+                        <HugeiconsIcon
+                          icon={PencilEdit01Icon}
+                          size={12}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+                      <button
+                        aria-label="Delete conversation"
+                        className="focus-ring flex h-6 w-6 items-center justify-center rounded text-stone-500 hover:text-red-300"
+                        onClick={() => setConfirmingId(conv._id)}
+                        type="button"
+                      >
+                        <HugeiconsIcon
+                          icon={Delete02Icon}
+                          size={12}
+                          strokeWidth={1.8}
+                        />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Popover.Content>
       </Popover.Portal>
@@ -336,10 +514,11 @@ function ChatBody({
   conversationId: Id<"conversations"> | null;
   currentPage?: number;
   document: WorkspaceDocument;
-  onCitationSelect?: (pageNumber: number) => void;
+  onCitationSelect?: (citation: CitationTarget) => void;
   onConversationCreated: (id: Id<"conversations">) => void;
 }) {
   const { getToken, sessionClaims } = useAuth();
+  const stopGeneration = useMutation(api.chatData.stopGeneration);
   const messages = useQuery(
     api.chatData.getConversationMessages,
     conversationId ? { conversationId } : "skip",
@@ -351,7 +530,14 @@ function ChatBody({
     useState<PendingExchange | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const pendingRef = useRef<PendingExchange | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+
+  // Mirror pending state into a ref so stop can read the latest partial synchronously.
+  useEffect(() => {
+    pendingRef.current = pendingExchange;
+  }, [pendingExchange]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -363,18 +549,29 @@ function ChatBody({
     );
   }, [conversationId]);
 
+  // Abort any in-flight stream when switching conversations or unmounting.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [conversationId]);
+
   useEffect(() => {
     if (!messages || !pendingExchange) return;
     if (pendingExchange.isStreaming) return;
 
-    const persistedUser = messages.some((message) =>
-      matchesPendingUser(message, pendingExchange),
-    );
-    const persistedAssistant = messages.some((message) =>
-      matchesPendingAssistant(message, pendingExchange),
-    );
+    const assistantPersisted = pendingExchange.assistantMessageId
+      ? messages.some(
+          (message) => message._id === pendingExchange.assistantMessageId,
+        )
+      : false;
+    const userPersisted = pendingExchange.isRegenerate
+      ? true
+      : messages.some((message) =>
+          matchesPendingUser(message, pendingExchange),
+        );
 
-    if (persistedUser && persistedAssistant) {
+    if (assistantPersisted && userPersisted) {
       setPendingExchange(null);
     }
   }, [messages, pendingExchange]);
@@ -386,120 +583,202 @@ function ChatBody({
     }
   }, [input]);
 
+  const runGeneration = useCallback(
+    async (params: {
+      regenerate?: boolean;
+      expectedAssistantMessageId?: Id<"messages">;
+      userContent?: string;
+    }) => {
+      if (isGenerating) return;
+
+      const isRegenerate = params.regenerate === true;
+      const userContent = params.userContent ?? "";
+
+      setError(null);
+      setIsGenerating(true);
+      const submittedAt = Date.now();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      setPendingExchange({
+        assistantContent: "",
+        assistantMessageId: null,
+        citations: [],
+        conversationId,
+        isRegenerate,
+        isStreaming: true,
+        submittedAt,
+        userContent,
+      });
+
+      try {
+        // Match ConvexProviderWithClerk: use Clerk's native Convex session token
+        // when its audience is already "convex", otherwise fall back to a JWT
+        // template named "convex".
+        const token =
+          sessionClaims?.aud === "convex"
+            ? await getToken()
+            : await getToken({ template: "convex" });
+        const siteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
+        if (!siteUrl)
+          throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is not configured");
+
+        const requestBody = isRegenerate
+          ? {
+              documentId: document._id,
+              conversationId: conversationId ?? undefined,
+              regenerate: true,
+              expectedAssistantMessageId: params.expectedAssistantMessageId,
+            }
+          : {
+              documentId: document._id,
+              conversationId: conversationId ?? undefined,
+              content: userContent,
+            };
+
+        const res = await fetch(`${siteUrl}/api/chat/stream`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok || !res.body) {
+          throw new Error(`Stream request failed: ${res.status}`);
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop() ?? "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const raw = line.slice("data: ".length).trim();
+            if (!raw) continue;
+
+            let event: { type: string; [k: string]: unknown };
+            try {
+              event = JSON.parse(raw) as typeof event;
+            } catch {
+              continue;
+            }
+
+            if (event.type === "meta") {
+              const newConvId = event.conversationId as Id<"conversations">;
+              const assistantMessageId =
+                event.assistantMessageId as Id<"messages">;
+              setPendingExchange((cur) =>
+                cur
+                  ? { ...cur, conversationId: newConvId, assistantMessageId }
+                  : null,
+              );
+              if (event.isNew) {
+                onConversationCreated(newConvId);
+              }
+            } else if (event.type === "token") {
+              const tok = event.token as string;
+              setPendingExchange((cur) =>
+                cur
+                  ? { ...cur, assistantContent: cur.assistantContent + tok }
+                  : null,
+              );
+            } else if (event.type === "done") {
+              const content = event.content as string | undefined;
+              const citations = event.citations as Citation[];
+              setPendingExchange((cur) => {
+                if (!cur) return null;
+                return {
+                  ...cur,
+                  assistantContent: content ?? cur.assistantContent,
+                  citations,
+                  isStreaming: false,
+                };
+              });
+            } else if (event.type === "error") {
+              throw new Error(event.error as string);
+            }
+          }
+        }
+      } catch (err) {
+        if (isAbortError(err)) {
+          // Stop was requested; handleStop persists the partial. Leave the bubble.
+          return;
+        }
+        if (!isRegenerate) {
+          setInput(userContent);
+        }
+        setPendingExchange(null);
+        setError(
+          err instanceof Error ? err.message : "Failed to send message.",
+        );
+      } finally {
+        setIsGenerating(false);
+        abortRef.current = null;
+      }
+    },
+    [
+      conversationId,
+      document._id,
+      getToken,
+      isGenerating,
+      onConversationCreated,
+      sessionClaims?.aud,
+    ],
+  );
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const question = input.trim();
     if (!question || isGenerating) return;
-
     setInput("");
-    setError(null);
-    setIsGenerating(true);
-    const submittedAt = Date.now();
-    setPendingExchange({
-      assistantContent: "",
-      citations: [],
-      conversationId,
-      isStreaming: true,
-      submittedAt,
-      userContent: question,
-    });
-
-    try {
-      // Match ConvexProviderWithClerk: use Clerk's native Convex session token
-      // when its audience is already "convex", otherwise fall back to a JWT
-      // template named "convex".
-      const token =
-        sessionClaims?.aud === "convex"
-          ? await getToken()
-          : await getToken({ template: "convex" });
-      const siteUrl = process.env.NEXT_PUBLIC_CONVEX_SITE_URL;
-      if (!siteUrl)
-        throw new Error("NEXT_PUBLIC_CONVEX_SITE_URL is not configured");
-
-      const res = await fetch(`${siteUrl}/api/chat/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          documentId: document._id,
-          conversationId: conversationId ?? undefined,
-          content: question,
-        }),
-      });
-
-      if (!res.ok || !res.body) {
-        throw new Error(`Stream request failed: ${res.status}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const raw = line.slice("data: ".length).trim();
-          if (!raw) continue;
-
-          let event: { type: string; [k: string]: unknown };
-          try {
-            event = JSON.parse(raw) as typeof event;
-          } catch {
-            continue;
-          }
-
-          if (event.type === "meta") {
-            const newConvId = event.conversationId as Id<"conversations">;
-            setPendingExchange((cur) =>
-              cur ? { ...cur, conversationId: newConvId } : null,
-            );
-            if (event.isNew) {
-              onConversationCreated(newConvId);
-            }
-          } else if (event.type === "token") {
-            const tok = event.token as string;
-            setPendingExchange((cur) =>
-              cur
-                ? {
-                    ...cur,
-                    assistantContent: cur.assistantContent + tok,
-                  }
-                : null,
-            );
-          } else if (event.type === "done") {
-            const content = event.content as string | undefined;
-            const citations = event.citations as Citation[];
-            setPendingExchange((cur) => {
-              if (!cur) return null;
-              return {
-                ...cur,
-                assistantContent: content ?? cur.assistantContent,
-                citations,
-                isStreaming: false,
-              };
-            });
-          } else if (event.type === "error") {
-            throw new Error(event.error as string);
-          }
-        }
-      }
-    } catch (err) {
-      setInput(question);
-      setPendingExchange(null);
-      setError(err instanceof Error ? err.message : "Failed to send message.");
-    } finally {
-      setIsGenerating(false);
-    }
+    await runGeneration({ userContent: question });
   };
+
+  const handleStop = useCallback(async () => {
+    const pending = pendingRef.current;
+    // Stop visual streaming immediately for responsiveness.
+    setPendingExchange((cur) => (cur ? { ...cur, isStreaming: false } : cur));
+
+    if (pending?.assistantMessageId) {
+      // Persist the stop and AWAIT it before aborting, so it commits while the server
+      // is still streaming and wins the race against complete-finalization (which is
+      // guarded on status === "streaming").
+      try {
+        await stopGeneration({
+          messageId: pending.assistantMessageId,
+          content: pending.assistantContent,
+        });
+      } catch {
+        // Best-effort; the server also marks the message stopped on abort.
+      }
+    } else {
+      // No generation id yet — drop the optimistic bubble.
+      setPendingExchange(null);
+    }
+    abortRef.current?.abort();
+  }, [stopGeneration]);
+
+  const handleRegenerate = useCallback(
+    (assistantMessageId: Id<"messages">) => {
+      if (isGenerating) return;
+      void runGeneration({
+        regenerate: true,
+        expectedAssistantMessageId: assistantMessageId,
+      });
+    },
+    [isGenerating, runGeneration],
+  );
 
   const handleSuggestedPrompt = useCallback((text: string) => {
     setInput(text);
@@ -515,8 +794,10 @@ function ChatBody({
           ? normalizeAssistantContent(message.content)
           : message.content,
       createdAt: message.createdAt,
+      id: message._id,
       key: message._id,
       role: message.role,
+      status: message.status,
     }),
   );
 
@@ -524,11 +805,13 @@ function ChatBody({
     const hasPendingUser = persistedMessages.some((message) =>
       matchesPendingUser(message, pendingExchange),
     );
-    const hasPendingAssistant = persistedMessages.some((message) =>
-      matchesPendingAssistant(message, pendingExchange),
-    );
+    const hasPendingAssistant = pendingExchange.assistantMessageId
+      ? persistedMessages.some(
+          (message) => message._id === pendingExchange.assistantMessageId,
+        )
+      : false;
 
-    if (!hasPendingUser) {
+    if (!pendingExchange.isRegenerate && !hasPendingUser) {
       displayMessages.push({
         content: pendingExchange.userContent,
         createdAt: pendingExchange.submittedAt,
@@ -553,6 +836,12 @@ function ChatBody({
     }
   }
 
+  // Index of the last assistant message that can be regenerated (persisted + idle).
+  const lastAssistantId =
+    !pendingExchange && !isGenerating
+      ? [...displayMessages].reverse().find((m) => m.role === "assistant")?.id
+      : undefined;
+
   const hasMessages = displayMessages.length > 0;
   const showSuggestionChips = !hasMessages && !isGenerating;
 
@@ -575,6 +864,11 @@ function ChatBody({
                   key={msg.key}
                   message={msg}
                   onCitationSelect={onCitationSelect}
+                  onRegenerate={
+                    msg.id && msg.id === lastAssistantId
+                      ? handleRegenerate
+                      : undefined
+                  }
                 />
               ))}
             </AnimatePresence>
@@ -693,19 +987,34 @@ function ChatBody({
               rows={1}
               value={input}
             />
-            <button
-              aria-label="Send message"
-              className={cn(
-                "focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-150",
-                input.trim() && !isGenerating
-                  ? "bg-amber-500 text-[#070707] shadow-[0_2px_12px_rgba(245,158,11,0.25)] hover:bg-amber-400"
-                  : "bg-white/[0.06] text-stone-600",
-              )}
-              disabled={!input.trim() || isGenerating}
-              type="submit"
-            >
-              <HugeiconsIcon icon={ArrowUp01Icon} size={16} strokeWidth={2} />
-            </button>
+            {isGenerating ? (
+              <button
+                aria-label="Stop generating"
+                className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.08] text-stone-200 transition-colors duration-150 hover:bg-white/[0.12]"
+                onClick={() => void handleStop()}
+                type="button"
+              >
+                <HugeiconsIcon
+                  icon={StopCircleIcon}
+                  size={18}
+                  strokeWidth={1.8}
+                />
+              </button>
+            ) : (
+              <button
+                aria-label="Send message"
+                className={cn(
+                  "focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-150",
+                  input.trim()
+                    ? "bg-amber-500 text-[#070707] shadow-[0_2px_12px_rgba(245,158,11,0.25)] hover:bg-amber-400"
+                    : "bg-white/[0.06] text-stone-600",
+                )}
+                disabled={!input.trim()}
+                type="submit"
+              >
+                <HugeiconsIcon icon={ArrowUp01Icon} size={16} strokeWidth={2} />
+              </button>
+            )}
           </div>
 
           <div className="flex items-center justify-between px-4 pt-0 pb-2.5">
@@ -757,11 +1066,35 @@ function EmptyState() {
 function ChatMessageBubble({
   message,
   onCitationSelect,
+  onRegenerate,
 }: {
   message: ChatMessageItem;
-  onCitationSelect?: (pageNumber: number) => void;
+  onCitationSelect?: (citation: CitationTarget) => void;
+  onRegenerate?: (assistantMessageId: Id<"messages">) => void;
 }) {
   const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 1_500);
+    } catch {
+      // Clipboard may be unavailable; ignore.
+    }
+  };
+
+  const showActions =
+    !isUser && !message.streaming && message.content.length > 0;
 
   return (
     <motion.div
@@ -776,7 +1109,7 @@ function ChatMessageBubble({
         </div>
       )}
 
-      <div className={cn("max-w-[88%] min-w-0", isUser && "max-w-[82%]")}>
+      <div className={cn("group max-w-[88%] min-w-0", isUser && "max-w-[82%]")}>
         <div
           className={cn(
             "mb-1.5 flex items-center gap-2 px-0.5 text-xs text-stone-500",
@@ -787,6 +1120,9 @@ function ChatMessageBubble({
           <span className="text-stone-600">
             {messageTimeFormatter.format(message.createdAt)}
           </span>
+          {message.status === "stopped" && (
+            <span className="text-stone-500/80">· stopped</span>
+          )}
           {message.pending && (
             <span className="inline-flex items-center gap-1 text-xs text-amber-400/60">
               <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-amber-400/60" />
@@ -824,6 +1160,39 @@ function ChatMessageBubble({
             onCitationSelect={onCitationSelect}
           />
         )}
+
+        {showActions && (
+          <div className="mt-1.5 flex items-center gap-1 px-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <button
+              aria-label={copied ? "Copied" : "Copy answer"}
+              className="focus-ring inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-stone-500 transition-colors hover:text-stone-300"
+              onClick={handleCopy}
+              type="button"
+            >
+              <HugeiconsIcon
+                icon={copied ? Tick02Icon : Copy01Icon}
+                size={12}
+                strokeWidth={1.8}
+              />
+              <span>{copied ? "Copied" : "Copy"}</span>
+            </button>
+            {onRegenerate && message.id && (
+              <button
+                aria-label="Regenerate answer"
+                className="focus-ring inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs text-stone-500 transition-colors hover:text-amber-300"
+                onClick={() => onRegenerate(message.id as Id<"messages">)}
+                type="button"
+              >
+                <HugeiconsIcon
+                  icon={ArrowReloadHorizontalIcon}
+                  size={12}
+                  strokeWidth={1.8}
+                />
+                <span>Regenerate</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -836,7 +1205,7 @@ function CitationList({
   onCitationSelect,
 }: {
   citations: Citation[];
-  onCitationSelect?: (pageNumber: number) => void;
+  onCitationSelect?: (citation: CitationTarget) => void;
 }) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -857,7 +1226,11 @@ function CitationList({
                   : "border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-stone-400 hover:border-amber-400/15 hover:text-stone-300",
               )}
               onClick={() => {
-                onCitationSelect?.(cite.pageNumber);
+                onCitationSelect?.({
+                  pageNumber: cite.pageNumber,
+                  quote: cite.pageQuote ?? cite.quote,
+                  quoteRatio: cite.pageQuoteRatio,
+                });
                 setExpandedIndex(isExpanded ? null : index);
               }}
               type="button"

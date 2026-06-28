@@ -1,10 +1,14 @@
 "use client";
 
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowReloadHorizontalIcon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import type { Id } from "../../../convex/_generated/dataModel";
 import type { WorkspaceDocument } from "./Sidebar";
 
 type PipelineStepperProps = {
   document: WorkspaceDocument;
+  onRetry?: (id: Id<"documents">) => void | Promise<void>;
 };
 
 type StepStatus = "completed" | "active" | "pending" | "failed";
@@ -113,7 +117,7 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function PipelineStepper({ document }: PipelineStepperProps) {
+export function PipelineStepper({ document, onRetry }: PipelineStepperProps) {
   const steps = deriveSteps(document);
   const isFailed = document.status === "failed";
 
@@ -232,12 +236,26 @@ export function PipelineStepper({ document }: PipelineStepperProps) {
       </div>
 
       {/* Footer hint */}
-      <div className="border-t border-stone-800/60 px-5 py-3">
+      <div className="flex items-center justify-between gap-3 border-t border-stone-800/60 px-5 py-3">
         <p className="text-xs text-stone-600">
           {isFailed
-            ? "Try uploading the document again."
+            ? "Retry to run the pipeline again."
             : "Chat will be available once processing completes."}
         </p>
+        {isFailed && onRetry && (
+          <button
+            className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-500/25 bg-red-500/[0.06] px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/[0.12]"
+            onClick={() => void onRetry(document._id)}
+            type="button"
+          >
+            <HugeiconsIcon
+              icon={ArrowReloadHorizontalIcon}
+              size={13}
+              strokeWidth={1.8}
+            />
+            Retry processing
+          </button>
+        )}
       </div>
     </div>
   );

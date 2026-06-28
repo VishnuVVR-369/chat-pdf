@@ -183,6 +183,8 @@ export type ValidatedCitation = {
   quote: string;
   quoteStartOffset: number;
   quoteEndOffset: number;
+  pageQuote: string;
+  pageQuoteRatio: number;
 };
 
 export type SummaryCitation = {
@@ -372,6 +374,45 @@ export function resolveCitationPageNumber(
   return matchingSpan?.pageNumber ?? chunk.startPageNumber;
 }
 
+// Resolves which page a quote is cited on, plus the slice of the quote that actually
+// lies on that page (handles quotes spanning a page boundary) and where it sits within
+// the page (0..1) so the viewer can disambiguate repeated text.
+export function resolveCitationPageQuote(
+  chunk: RankedChunk,
+  quoteStartOffset: number,
+  quoteEndOffset: number,
+) {
+  const matchingSpan = chunk.pageSpans.find(
+    (s) => quoteStartOffset >= s.startOffset && quoteStartOffset < s.endOffset,
+  );
+
+  if (!matchingSpan) {
+    return {
+      pageNumber: chunk.startPageNumber,
+      pageQuote: normalizeWhitespace(
+        chunk.text.slice(quoteStartOffset, quoteEndOffset),
+      ),
+      pageQuoteRatio: 0,
+    };
+  }
+
+  const pageStart = Math.max(quoteStartOffset, matchingSpan.startOffset);
+  const pageEnd = Math.min(quoteEndOffset, matchingSpan.endOffset);
+  const pageLength = Math.max(
+    1,
+    matchingSpan.endOffset - matchingSpan.startOffset,
+  );
+
+  return {
+    pageNumber: matchingSpan.pageNumber,
+    pageQuote: normalizeWhitespace(chunk.text.slice(pageStart, pageEnd)),
+    pageQuoteRatio: Math.min(
+      1,
+      Math.max(0, (pageStart - matchingSpan.startOffset) / pageLength),
+    ),
+  };
+}
+
 export function buildValidatedChunkCitations(
   rawCitations: StructuredAssistantResponse["citations"],
   chunks: RankedChunk[],
@@ -395,8 +436,14 @@ export function buildValidatedChunkCitations(
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
 
+    const { pageNumber, pageQuote, pageQuoteRatio } = resolveCitationPageQuote(
+      chunk,
+      quoteStartOffset,
+      quoteEndOffset,
+    );
+
     citations.push({
-      pageNumber: resolveCitationPageNumber(chunk, quoteStartOffset),
+      pageNumber,
       snippet: buildSnippet(chunk.text, quoteStartOffset, quoteEndOffset),
       chunkId: chunk._id,
       startPageNumber: chunk.startPageNumber,
@@ -404,6 +451,8 @@ export function buildValidatedChunkCitations(
       quote,
       quoteStartOffset,
       quoteEndOffset,
+      pageQuote: pageQuote || quote,
+      pageQuoteRatio,
     });
 
     if (citations.length >= MAX_CITATIONS) break;
@@ -512,6 +561,7 @@ async function fetchRoutingDecision(
   title: string,
   history: ConversationTurn[],
   currentUserMessage: string,
+  signal?: AbortSignal,
 ) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
@@ -519,6 +569,7 @@ async function fetchRoutingDecision(
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal,
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -582,6 +633,7 @@ export async function routeChatQuery(args: {
   title: string;
   history: ConversationTurn[];
   currentUserMessage: string;
+  signal?: AbortSignal;
 }): Promise<ChatRoutingDecision> {
   const fallback = getFallbackRoutingDecision(args.currentUserMessage);
 
@@ -590,6 +642,7 @@ export async function routeChatQuery(args: {
       args.title,
       args.history.slice(-ROUTING_HISTORY_MESSAGES),
       args.currentUserMessage,
+      args.signal,
     );
 
     if (
@@ -614,13 +667,17 @@ export async function routeChatQuery(args: {
   }
 }
 
-export async function embedQuery(query: string): Promise<number[]> {
+export async function embedQuery(
+  query: string,
+  signal?: AbortSignal,
+): Promise<number[]> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
 
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
+    signal,
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
@@ -649,6 +706,7 @@ export async function getChunkRetrievalContext(
     documentId: Id<"documents">;
     ownerTokenIdentifier: string;
     query: string;
+    signal?: AbortSignal;
   },
 ) {
   const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
@@ -661,7 +719,7 @@ export async function getChunkRetrievalContext(
     },
   );
 
-  const queryVector = await embedQuery(args.query);
+  const queryVector = await embedQuery(args.query, args.signal);
   const vectorResults = await ctx.vectorSearch(
     "documentChunks",
     "by_embedding",

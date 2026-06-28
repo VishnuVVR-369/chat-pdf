@@ -8,8 +8,8 @@ ChatPDF is a customer-facing web application for uploading PDFs and chatting wit
 - Process documents asynchronously into searchable chunks
 - Retrieve relevant context with hybrid search
 - Generate grounded answers with citations
-- Support single-document and multi-document chat
-- Open cited pages in a PDF viewer and highlight referenced content
+- Chat with a document across multiple saved conversations
+- Open cited pages in a PDF viewer and highlight the referenced text
 
 ## Core Product Goals
 
@@ -50,28 +50,29 @@ ChatPDF is a customer-facing web application for uploading PDFs and chatting wit
 
 1. A user uploads a PDF.
 2. The file and document metadata are stored.
-3. A background ingestion pipeline extracts text or runs OCR.
+3. A background ingestion pipeline runs Mistral OCR to extract page text.
 4. The document is split into pages and chunks.
 5. Embeddings are generated and stored for retrieval.
 
 ### Chat flow
 
-1. A user asks a question about one or more selected documents.
+1. A user asks a question about the selected document.
 2. The system runs hybrid retrieval over the indexed chunks.
 3. Relevant context is sent to the model.
 4. The answer is streamed back with citations.
-5. Citations link back to document pages and highlighted text when available.
+5. Citations link back to document pages and the highlighted source text.
 
 ## Main Features
 
 - Google and GitHub authentication
 - Protected dashboard experience
-- PDF upload and document management
-- Async ingestion pipeline
-- Hybrid retrieval
-- Streaming RAG chat
-- Citation rendering
-- PDF page navigation and highlighting
+- PDF upload with document management (rename, delete, retry failed processing)
+- Async OCR ingestion pipeline with automatic retries
+- Hybrid retrieval (vector + full-text) with query routing
+- Streaming RAG chat with stop, regenerate, and copy controls
+- Multiple conversations per document (rename, delete)
+- Citation rendering with in-PDF text highlighting
+- PDF page navigation
 - PostHog event tracking
 
 ## Environment Variables

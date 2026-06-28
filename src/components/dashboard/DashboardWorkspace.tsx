@@ -61,6 +61,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     api.documentUploads.completeDirectUpload,
   );
   const getDocumentPdfUrl = useAction(api.documentUploads.getDocumentPdfUrl);
+  const renameDocument = useMutation(api.documents.renameDocument);
+  const retryDocumentProcessing = useMutation(
+    api.documents.retryDocumentProcessing,
+  );
+  const deleteDocument = useAction(api.documents.deleteDocument);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -81,6 +86,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   >({});
   const [currentPage, setCurrentPage] = useState(1);
   const [pageCount, setPageCount] = useState<number | null>(null);
+  const [activeCitation, setActiveCitation] = useState<{
+    page: number;
+    quote?: string;
+    quoteRatio?: number;
+  } | null>(null);
 
   const workspaceDocuments: WorkspaceDocument[] = documents ?? EMPTY_DOCUMENTS;
   const selectedDocument: WorkspaceDocument | null =
@@ -155,6 +165,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   useEffect(() => {
     setCurrentPage(1);
     setPageCount(selectedDocument?.pageCount ?? null);
+    setActiveCitation(null);
   }, [selectedDocument?._id, selectedDocument?.pageCount]);
 
   useEffect(() => {
@@ -235,11 +246,62 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
 
   const handleUploadClick = () => setIsUploadModalOpen(true);
 
-  // When a citation is clicked, jump page and switch to the PDF tab on mobile.
-  const handleCitationSelect = (page: number) => {
-    setCurrentPage(page);
+  // When a citation is clicked, jump to its page, record the quote to highlight, and
+  // switch to the PDF tab on mobile.
+  const handleCitationSelect = (citation: {
+    pageNumber: number;
+    quote?: string;
+    quoteRatio?: number;
+  }) => {
+    setCurrentPage(citation.pageNumber);
+    setActiveCitation({
+      page: citation.pageNumber,
+      quote: citation.quote,
+      quoteRatio: citation.quoteRatio,
+    });
     setMobileTab("pdf");
   };
+
+  const handleRenameDocument = async (
+    documentId: Id<"documents">,
+    title: string,
+  ) => {
+    await renameDocument({ documentId, title });
+  };
+
+  const handleRetryDocument = async (documentId: Id<"documents">) => {
+    await retryDocumentProcessing({ documentId });
+  };
+
+  const handleDeleteDocument = async (documentId: Id<"documents">) => {
+    if (selectedDocumentId === documentId) {
+      setSelectedDocumentId(null);
+    }
+    if (recentDocumentId === documentId) {
+      setRecentDocumentId(null);
+      try {
+        if (window.localStorage.getItem(RECENT_DOC_KEY) === documentId) {
+          window.localStorage.removeItem(RECENT_DOC_KEY);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    setUploadedPreviewFiles((current) => {
+      if (!(documentId in current)) return current;
+      const next = { ...current };
+      delete next[documentId];
+      return next;
+    });
+    await deleteDocument({ documentId });
+  };
+
+  const citationOnCurrentPage =
+    activeCitation && activeCitation.page === currentPage
+      ? activeCitation
+      : null;
+  const highlightQuote = citationOnCurrentPage?.quote ?? null;
+  const highlightRatio = citationOnCurrentPage?.quoteRatio ?? null;
 
   const sidebarProps = useMemo(
     () => ({
@@ -304,6 +366,9 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                   handleUploadClick();
                   setIsMobileSidebarOpen(false);
                 }}
+                onDeleteDocument={handleDeleteDocument}
+                onRenameDocument={handleRenameDocument}
+                onRetryDocument={handleRetryDocument}
               />
             </div>
           </div>
@@ -317,6 +382,9 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
             onCollapsedChange={setIsSidebarCollapsed}
             onDocumentSelect={setSelectedDocumentId}
             onUploadClick={handleUploadClick}
+            onDeleteDocument={handleDeleteDocument}
+            onRenameDocument={handleRenameDocument}
+            onRetryDocument={handleRetryDocument}
           />
         </div>
 
@@ -352,6 +420,8 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                   <PdfViewer
                     key={selectedDocument._id}
                     document={selectedDocument}
+                    highlightQuote={highlightQuote}
+                    highlightRatio={highlightRatio}
                     localFile={
                       selectedDocumentPreviewUrl
                         ? null
@@ -359,6 +429,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                     }
                     onPageCountChange={setPageCount}
                     onPageChange={setCurrentPage}
+                    onRetry={handleRetryDocument}
                     pageCount={pageCount}
                     pageNumber={currentPage}
                     resolvedFileUrl={selectedDocumentPreviewUrl}
@@ -370,12 +441,13 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                       key={selectedDocument._id}
                       document={selectedDocument}
                       currentPage={currentPage}
-                      onCitationSelect={setCurrentPage}
+                      onCitationSelect={handleCitationSelect}
                     />
                   ) : (
                     <PipelineStepper
                       key={selectedDocument._id}
                       document={selectedDocument}
+                      onRetry={handleRetryDocument}
                     />
                   )}
                 </div>
@@ -387,6 +459,8 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                   <PdfViewer
                     key={`mobile-pdf-${selectedDocument._id}`}
                     document={selectedDocument}
+                    highlightQuote={highlightQuote}
+                    highlightRatio={highlightRatio}
                     localFile={
                       selectedDocumentPreviewUrl
                         ? null
@@ -394,6 +468,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                     }
                     onPageCountChange={setPageCount}
                     onPageChange={setCurrentPage}
+                    onRetry={handleRetryDocument}
                     pageCount={pageCount}
                     pageNumber={currentPage}
                     resolvedFileUrl={selectedDocumentPreviewUrl}
@@ -411,6 +486,7 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                       <PipelineStepper
                         key={`mobile-chat-${selectedDocument._id}`}
                         document={selectedDocument}
+                        onRetry={handleRetryDocument}
                       />
                     )}
                   </>

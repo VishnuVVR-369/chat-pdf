@@ -1,8 +1,16 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { ActionCtx, MutationCtx, QueryCtx } from "./_generated/server";
+import {
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
+
+const MAX_DOCUMENT_TITLE_LENGTH = 200;
 
 const documentStatusValidator = v.union(
   v.literal("uploading"),
@@ -325,6 +333,15 @@ export const insertDocumentPageBatch = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    // Skip inserts if the document was deleted mid-processing (avoids orphan rows).
+    const document = await ctx.db.get(args.documentId);
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+    ) {
+      return null;
+    }
+
     const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
 
     for (const page of args.pages) {
@@ -400,6 +417,15 @@ export const insertDocumentChunkBatch = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    // Skip inserts if the document was deleted mid-processing (avoids orphan rows).
+    const document = await ctx.db.get(args.documentId);
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+    ) {
+      return null;
+    }
+
     const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
 
     for (const chunk of args.chunks) {
@@ -548,6 +574,173 @@ export const listDocuments = query({
       .take(50);
 
     return documents.map(toDocumentListItem);
+  },
+});
+
+export const renameDocument = mutation({
+  args: {
+    documentId: v.id("documents"),
+    title: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await requireCurrentUser(ctx);
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== identity.tokenIdentifier
+    ) {
+      throw new Error("Document not found.");
+    }
+
+    const title = args.title.trim().slice(0, MAX_DOCUMENT_TITLE_LENGTH);
+
+    if (!title) {
+      throw new Error("Document title cannot be empty.");
+    }
+
+    await ctx.db.patch(args.documentId, { title });
+    return null;
+  },
+});
+
+export const retryDocumentProcessing = mutation({
+  args: {
+    documentId: v.id("documents"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const identity = await requireCurrentUser(ctx);
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== identity.tokenIdentifier
+    ) {
+      throw new Error("Document not found.");
+    }
+
+    if (document.status !== "failed") {
+      throw new Error("Only failed documents can be retried.");
+    }
+
+    const attemptNumber = (document.processingAttemptCount ?? 0) + 1;
+
+    // Flip to processing immediately so the failed banner clears; the scheduled
+    // pipeline reuses any OCR checkpoint and re-runs only the failed tail.
+    await ctx.db.patch(args.documentId, { status: "processing" });
+
+    await ctx.scheduler.runAfter(
+      0,
+      internal.documentProcessing.runDocumentOcr,
+      {
+        documentId: args.documentId,
+        attemptNumber,
+      },
+    );
+
+    return null;
+  },
+});
+
+export const deleteDocumentRecord = internalMutation({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const document = await ctx.db.get(args.documentId);
+
+    if (
+      !document ||
+      document.ownerTokenIdentifier !== args.ownerTokenIdentifier
+    ) {
+      return null;
+    }
+
+    await ctx.db.delete(args.documentId);
+    return null;
+  },
+});
+
+async function bestEffortDeleteStorage(
+  ctx: ActionCtx,
+  storageId: Id<"_storage"> | undefined,
+) {
+  if (!storageId) return;
+  try {
+    await ctx.storage.delete(storageId);
+  } catch {
+    // The blob may already be gone; deletion is best-effort.
+  }
+}
+
+export const deleteDocument = action({
+  args: {
+    documentId: v.id("documents"),
+  },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    const identity = await ctx.auth.getUserIdentity();
+
+    if (!identity) {
+      throw new Error("Authentication required.");
+    }
+    const ownerTokenIdentifier = identity.tokenIdentifier;
+
+    const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
+      documentId: args.documentId,
+      ownerTokenIdentifier,
+    });
+
+    if (!document) {
+      throw new Error("Document not found.");
+    }
+
+    // Tombstone first: once the record is gone, getOwnedDocument returns null so any
+    // in-flight processing / chat / retry mutations no-op safely.
+    await ctx.runMutation(internal.documents.deleteDocumentRecord, {
+      documentId: args.documentId,
+      ownerTokenIdentifier,
+    });
+
+    await bestEffortDeleteStorage(ctx, document.fileStorageId);
+    await bestEffortDeleteStorage(ctx, document.ocrResultStorageId);
+
+    await ctx.runMutation(internal.documents.clearDocumentPages, {
+      documentId: args.documentId,
+    });
+    await ctx.runMutation(internal.documents.clearDocumentChunks, {
+      documentId: args.documentId,
+    });
+
+    // Cascade conversations + their messages in bounded batches.
+    while (true) {
+      const conversationIds = await ctx.runQuery(
+        internal.chatData.getDocumentConversationIds,
+        { documentId: args.documentId, ownerTokenIdentifier },
+      );
+
+      if (conversationIds.length === 0) break;
+
+      for (const conversationId of conversationIds) {
+        let hasMore = true;
+        while (hasMore) {
+          const result = await ctx.runMutation(
+            internal.chatData.deleteConversationMessagesBatch,
+            { conversationId },
+          );
+          hasMore = result.hasMore;
+        }
+        await ctx.runMutation(internal.chatData.deleteConversationRow, {
+          conversationId,
+        });
+      }
+    }
+
+    return null;
   },
 });
 
