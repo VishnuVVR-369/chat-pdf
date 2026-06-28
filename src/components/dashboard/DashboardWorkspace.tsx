@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useClerk } from "@clerk/nextjs";
 import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Menu01Icon } from "@hugeicons/core-free-icons";
+import {
+  captureEvent,
+  captureException,
+  identifyUser,
+  resetAnalytics,
+} from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -20,6 +26,7 @@ import { UploadModal } from "./UploadModal";
 type DashboardWorkspaceProps = {
   email: string | null | undefined;
   name: string | null | undefined;
+  userId: string;
 };
 
 type MobileTab = "pdf" | "chat";
@@ -46,7 +53,11 @@ function readRecentDocumentId(): string | null {
   }
 }
 
-export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
+export function DashboardWorkspace({
+  email,
+  name,
+  userId,
+}: DashboardWorkspaceProps) {
   const router = useRouter();
   const { signOut } = useClerk();
   const { isAuthenticated, isLoading: isAuthLoading } = useConvexAuth();
@@ -91,6 +102,8 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     quote?: string;
     quoteRatio?: number;
   } | null>(null);
+  const trackedDocumentStatuses = useRef<Record<string, string>>({});
+  const trackedDashboardReady = useRef(false);
 
   const workspaceDocuments: WorkspaceDocument[] = documents ?? EMPTY_DOCUMENTS;
   const selectedDocument: WorkspaceDocument | null =
@@ -113,6 +126,47 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
       setRecentDocumentId(recent as Id<"documents">);
     }
   }, []);
+
+  useEffect(() => {
+    identifyUser(userId, { email: email ?? null, name: name ?? null });
+  }, [email, name, userId]);
+
+  useEffect(() => {
+    if (trackedDashboardReady.current || documents === undefined) return;
+    trackedDashboardReady.current = true;
+    captureEvent("dashboard_loaded", {
+      document_count: documents.length,
+      has_documents: documents.length > 0,
+    });
+  }, [documents]);
+
+  useEffect(() => {
+    if (documents === undefined) return;
+
+    for (const document of documents) {
+      const previousStatus = trackedDocumentStatuses.current[document._id];
+      if (previousStatus === document.status) continue;
+
+      trackedDocumentStatuses.current[document._id] = document.status;
+
+      captureEvent(
+        previousStatus ? "document_status_changed" : "document_seen",
+        {
+          document_id: document._id,
+          embedded_chunk_count: document.embeddedChunkCount,
+          embedded_page_count: document.embeddedPageCount,
+          has_processing_error: Boolean(document.processingError),
+          ocr_method: document.ocrMethod,
+          ocr_provider: document.ocrProvider,
+          page_count: document.pageCount,
+          previous_status: previousStatus,
+          status: document.status,
+          storage_content_type: document.storageContentType,
+          storage_size: document.storageSize,
+        },
+      );
+    }
+  }, [documents]);
 
   // Persist sidebar collapsed state.
   useEffect(() => {
@@ -202,10 +256,13 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
   }, [getDocumentPdfUrl, selectedDocumentId]);
 
   const handleSignOut = async () => {
+    captureEvent("sign_out_started");
     setIsSigningOut(true);
 
     try {
       await signOut();
+      captureEvent("sign_out_completed");
+      resetAnalytics();
       router.push("/sign-in");
       router.refresh();
     } finally {
@@ -246,6 +303,17 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
 
   const handleUploadClick = () => setIsUploadModalOpen(true);
 
+  const handleDocumentSelect = (
+    documentId: Id<"documents">,
+    source: "desktop_sidebar" | "mobile_sidebar" | "auto" = "desktop_sidebar",
+  ) => {
+    setSelectedDocumentId(documentId);
+    captureEvent("document_selected", {
+      document_id: documentId,
+      source,
+    });
+  };
+
   // When a citation is clicked, jump to its page, record the quote to highlight, and
   // switch to the PDF tab on mobile.
   const handleCitationSelect = (citation: {
@@ -253,6 +321,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     quote?: string;
     quoteRatio?: number;
   }) => {
+    captureEvent("citation_selected", {
+      document_id: selectedDocumentId ?? undefined,
+      page_number: citation.pageNumber,
+      quote_ratio: citation.quoteRatio,
+    });
     setCurrentPage(citation.pageNumber);
     setActiveCitation({
       page: citation.pageNumber,
@@ -266,14 +339,44 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
     documentId: Id<"documents">,
     title: string,
   ) => {
-    await renameDocument({ documentId, title });
+    try {
+      await renameDocument({ documentId, title });
+      captureEvent("document_renamed", {
+        document_id: documentId,
+        title_length: title.length,
+      });
+    } catch (error) {
+      captureException(error, {
+        document_id: documentId,
+        source: "document_rename",
+      });
+      throw error;
+    }
   };
 
   const handleRetryDocument = async (documentId: Id<"documents">) => {
-    await retryDocumentProcessing({ documentId });
+    try {
+      await retryDocumentProcessing({ documentId });
+      captureEvent("document_processing_retry_started", {
+        document_id: documentId,
+      });
+    } catch (error) {
+      captureException(error, {
+        document_id: documentId,
+        source: "document_processing_retry",
+      });
+      throw error;
+    }
   };
 
   const handleDeleteDocument = async (documentId: Id<"documents">) => {
+    const document = workspaceDocuments.find((item) => item._id === documentId);
+    captureEvent("document_delete_started", {
+      document_id: documentId,
+      page_count: document?.pageCount,
+      status: document?.status,
+      storage_size: document?.storageSize,
+    });
     if (selectedDocumentId === documentId) {
       setSelectedDocumentId(null);
     }
@@ -293,7 +396,18 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
       delete next[documentId];
       return next;
     });
-    await deleteDocument({ documentId });
+    try {
+      await deleteDocument({ documentId });
+      captureEvent("document_delete_completed", {
+        document_id: documentId,
+      });
+    } catch (error) {
+      captureException(error, {
+        document_id: documentId,
+        source: "document_delete",
+      });
+      throw error;
+    }
   };
 
   const citationOnCurrentPage =
@@ -330,11 +444,17 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
         isOpen={isUploadModalOpen}
         initialFile={dropZoneFile}
         onClose={() => {
+          captureEvent("upload_modal_closed");
           setIsUploadModalOpen(false);
           setDropZoneFile(null);
         }}
         onUpload={handleUploadFile}
         onSuccess={(documentId, file) => {
+          captureEvent("document_upload_attached_to_workspace", {
+            document_id: documentId,
+            file_size: file.size,
+            file_type: file.type || "application/pdf",
+          });
           setUploadedPreviewFiles((currentFiles) => ({
             ...currentFiles,
             [documentId]: file,
@@ -359,10 +479,13 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                 collapsed={false}
                 onCollapsedChange={() => setIsMobileSidebarOpen(false)}
                 onDocumentSelect={(id) => {
-                  setSelectedDocumentId(id);
+                  handleDocumentSelect(id, "mobile_sidebar");
                   setIsMobileSidebarOpen(false);
                 }}
                 onUploadClick={() => {
+                  captureEvent("upload_modal_opened", {
+                    source: "mobile_sidebar",
+                  });
                   handleUploadClick();
                   setIsMobileSidebarOpen(false);
                 }}
@@ -379,9 +502,17 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
           <Sidebar
             {...sidebarProps}
             collapsed={isSidebarCollapsed}
-            onCollapsedChange={setIsSidebarCollapsed}
-            onDocumentSelect={setSelectedDocumentId}
-            onUploadClick={handleUploadClick}
+            onCollapsedChange={(collapsed) => {
+              setIsSidebarCollapsed(collapsed);
+              captureEvent("sidebar_collapsed_changed", { collapsed });
+            }}
+            onDocumentSelect={(id) => handleDocumentSelect(id)}
+            onUploadClick={() => {
+              captureEvent("upload_modal_opened", {
+                source: "desktop_sidebar",
+              });
+              handleUploadClick();
+            }}
             onDeleteDocument={handleDeleteDocument}
             onRenameDocument={handleRenameDocument}
             onRetryDocument={handleRetryDocument}
@@ -405,7 +536,13 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
             {selectedDocument && (
               <MobileTabSwitcher
                 activeTab={mobileTab}
-                onChange={setMobileTab}
+                onChange={(tab) => {
+                  setMobileTab(tab);
+                  captureEvent("mobile_workspace_tab_changed", {
+                    document_id: selectedDocument._id,
+                    tab,
+                  });
+                }}
               />
             )}
           </div>
@@ -428,7 +565,15 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                         : selectedDocumentLocalFile
                     }
                     onPageCountChange={setPageCount}
-                    onPageChange={setCurrentPage}
+                    onPageChange={(page) => {
+                      setCurrentPage(page);
+                      captureEvent("pdf_page_changed", {
+                        document_id: selectedDocument._id,
+                        page,
+                        page_count: pageCount,
+                        source: "desktop_pdf_viewer",
+                      });
+                    }}
                     onRetry={handleRetryDocument}
                     pageCount={pageCount}
                     pageNumber={currentPage}
@@ -467,7 +612,15 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
                         : selectedDocumentLocalFile
                     }
                     onPageCountChange={setPageCount}
-                    onPageChange={setCurrentPage}
+                    onPageChange={(page) => {
+                      setCurrentPage(page);
+                      captureEvent("pdf_page_changed", {
+                        document_id: selectedDocument._id,
+                        page,
+                        page_count: pageCount,
+                        source: "mobile_pdf_viewer",
+                      });
+                    }}
                     onRetry={handleRetryDocument}
                     pageCount={pageCount}
                     pageNumber={currentPage}
@@ -496,6 +649,11 @@ export function DashboardWorkspace({ email, name }: DashboardWorkspaceProps) {
           ) : (
             <UploadDropZone
               onFileSelect={(file) => {
+                captureEvent("upload_modal_opened", {
+                  file_size: file.size,
+                  file_type: file.type || "application/pdf",
+                  source: "empty_drop_zone",
+                });
                 setDropZoneFile(file);
                 setIsUploadModalOpen(true);
               }}

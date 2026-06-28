@@ -14,5 +14,5 @@ export default async function DashboardPage() {
     user.emailAddresses[0]?.emailAddress;
   const name = user.fullName ?? user.username ?? user.firstName;
 
-  return <DashboardWorkspace email={email} name={name} />;
+  return <DashboardWorkspace email={email} name={name} userId={user.id} />;
 }

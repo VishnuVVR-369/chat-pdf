@@ -96,8 +96,11 @@ Copy `.env.example` to `.env.local` and provide values for:
 - `OPENAI_CHAT_MODEL`
 - `MISTRAL_API_KEY`
 - `MISTRAL_OCR_MODEL`
-- `NEXT_PUBLIC_POSTHOG_KEY`
+- `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`
 - `NEXT_PUBLIC_POSTHOG_HOST`
+
+`NEXT_PUBLIC_POSTHOG_KEY` is still supported as a fallback alias for existing
+local environments.
 
 ### Clerk JWT template
 

@@ -336,9 +336,9 @@ export const referenceGroup: DocsGroup = {
             <EnvTable
               rows={[
                 {
-                  name: "NEXT_PUBLIC_POSTHOG_KEY",
+                  name: "NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN",
                   purpose:
-                    "PostHog project API key. Omit to disable analytics entirely.",
+                    "PostHog project token. Omit to disable analytics entirely. NEXT_PUBLIC_POSTHOG_KEY is supported as a fallback alias.",
                   required: false,
                 },
                 {

@@ -3,6 +3,7 @@
 import type { DragEvent, ChangeEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { captureEvent, captureException } from "@/lib/analytics";
 import { inspectPdfFile } from "@/lib/pdf-client";
 import { cn } from "@/lib/utils";
 import { MAX_PDF_PAGES } from "@/constants/pdf";
@@ -22,6 +23,14 @@ type ModalPhase =
   | { type: "uploading"; file: File; pageCount: number | null }
   | { type: "success"; documentId: Id<"documents">; file: File }
   | { type: "error"; message: string };
+
+function getFileProperties(file: File) {
+  return {
+    file_size: file.size,
+    file_type: file.type || "application/pdf",
+    last_modified_age_ms: Date.now() - file.lastModified,
+  };
+}
 
 export function UploadModal({
   isOpen,
@@ -78,11 +87,18 @@ export function UploadModal({
 
   const processFile = useCallback(
     async (file: File) => {
+      const startedAt = performance.now();
+      captureEvent("pdf_upload_selected", getFileProperties(file));
+
       const looksLikePdf =
         file.type === "application/pdf" ||
         file.name.toLowerCase().endsWith(".pdf");
 
       if (!looksLikePdf) {
+        captureEvent("pdf_upload_rejected", {
+          ...getFileProperties(file),
+          reason: "invalid_file_type",
+        });
         setPhase({ type: "error", message: "Please select a valid PDF file." });
         return;
       }
@@ -93,15 +109,35 @@ export function UploadModal({
         const result = await inspectPdfFile(file);
 
         if (result.status === "rejected") {
+          captureEvent("pdf_upload_rejected", {
+            ...getFileProperties(file),
+            reason: result.message,
+          });
           setPhase({ type: "error", message: result.message });
           return;
         }
 
+        captureEvent("pdf_upload_validated", {
+          ...getFileProperties(file),
+          page_count: result.pageCount,
+          validation_ms: Math.round(performance.now() - startedAt),
+        });
         setPhase({ type: "uploading", file, pageCount: result.pageCount });
 
         const documentId = await onUpload(file);
+        captureEvent("pdf_upload_completed", {
+          ...getFileProperties(file),
+          document_id: documentId,
+          page_count: result.pageCount,
+          total_ms: Math.round(performance.now() - startedAt),
+        });
         setPhase({ type: "success", documentId, file });
       } catch (error) {
+        captureException(error, {
+          ...getFileProperties(file),
+          source: "pdf_upload",
+          total_ms: Math.round(performance.now() - startedAt),
+        });
         setPhase({
           type: "error",
           message:

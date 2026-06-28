@@ -22,6 +22,7 @@ import {
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { Streamdown } from "streamdown";
+import { captureEvent, captureException } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -200,14 +201,22 @@ export function ChatPanel({
         : (conversations?.[0]?._id ?? null);
 
   const handleNewConversation = () => {
+    captureEvent("conversation_new_started", {
+      document_id: document._id,
+    });
     setSelectedConversation("new");
   };
 
   const handleRenameConversation = useCallback(
     (id: Id<"conversations">, title: string) => {
       void renameConversation({ conversationId: id, title });
+      captureEvent("conversation_renamed", {
+        conversation_id: id,
+        document_id: document._id,
+        title_length: title.length,
+      });
     },
-    [renameConversation],
+    [document._id, renameConversation],
   );
 
   const handleDeleteConversation = useCallback(
@@ -216,8 +225,12 @@ export function ChatPanel({
         setSelectedConversation("new");
       }
       void deleteConversation({ conversationId: id });
+      captureEvent("conversation_deleted", {
+        conversation_id: id,
+        document_id: document._id,
+      });
     },
-    [deleteConversation, selectedConversation],
+    [deleteConversation, document._id, selectedConversation],
   );
 
   const activeTitle = activeConversationId
@@ -247,9 +260,13 @@ export function ChatPanel({
               conversations={conversations}
               onDelete={handleDeleteConversation}
               onRename={handleRenameConversation}
-              onSelect={(id) =>
-                setSelectedConversation(id as Id<"conversations">)
-              }
+              onSelect={(id) => {
+                setSelectedConversation(id as Id<"conversations">);
+                captureEvent("conversation_selected", {
+                  conversation_id: id,
+                  document_id: document._id,
+                });
+              }}
               selectedConversation={selectedConversation}
             />
           )}
@@ -597,8 +614,18 @@ function ChatBody({
       setError(null);
       setIsGenerating(true);
       const submittedAt = Date.now();
+      const generationStartedAt = performance.now();
       const controller = new AbortController();
       abortRef.current = controller;
+
+      captureEvent("chat_generation_started", {
+        conversation_id: conversationId ?? undefined,
+        current_page: currentPage,
+        document_id: document._id,
+        is_regenerate: isRegenerate,
+        question_length: userContent.length,
+        status: document.status,
+      });
 
       setPendingExchange({
         assistantContent: "",
@@ -678,12 +705,24 @@ function ChatBody({
               const newConvId = event.conversationId as Id<"conversations">;
               const assistantMessageId =
                 event.assistantMessageId as Id<"messages">;
+              captureEvent("chat_generation_meta_received", {
+                assistant_message_id: assistantMessageId,
+                conversation_id: newConvId,
+                document_id: document._id,
+                is_new_conversation: Boolean(event.isNew),
+                is_regenerate: isRegenerate,
+              });
               setPendingExchange((cur) =>
                 cur
                   ? { ...cur, conversationId: newConvId, assistantMessageId }
                   : null,
               );
               if (event.isNew) {
+                captureEvent("conversation_created", {
+                  conversation_id: newConvId,
+                  document_id: document._id,
+                  source: "chat_generation",
+                });
                 onConversationCreated(newConvId);
               }
             } else if (event.type === "token") {
@@ -696,6 +735,20 @@ function ChatBody({
             } else if (event.type === "done") {
               const content = event.content as string | undefined;
               const citations = event.citations as Citation[];
+              captureEvent("chat_generation_completed", {
+                answer_length: content?.length,
+                citation_count: citations.length,
+                conversation_id:
+                  pendingRef.current?.conversationId ??
+                  conversationId ??
+                  undefined,
+                document_id: document._id,
+                duration_ms: Math.round(
+                  performance.now() - generationStartedAt,
+                ),
+                is_regenerate: isRegenerate,
+                question_length: userContent.length,
+              });
               setPendingExchange((cur) => {
                 if (!cur) return null;
                 return {
@@ -718,6 +771,14 @@ function ChatBody({
         if (!isRegenerate) {
           setInput(userContent);
         }
+        captureException(err, {
+          conversation_id: conversationId ?? undefined,
+          document_id: document._id,
+          duration_ms: Math.round(performance.now() - generationStartedAt),
+          is_regenerate: isRegenerate,
+          question_length: userContent.length,
+          source: "chat_generation",
+        });
         setPendingExchange(null);
         setError(
           err instanceof Error ? err.message : "Failed to send message.",
@@ -729,7 +790,9 @@ function ChatBody({
     },
     [
       conversationId,
+      currentPage,
       document._id,
+      document.status,
       getToken,
       isGenerating,
       onConversationCreated,
@@ -747,6 +810,12 @@ function ChatBody({
 
   const handleStop = useCallback(async () => {
     const pending = pendingRef.current;
+    captureEvent("chat_generation_stop_requested", {
+      assistant_message_id: pending?.assistantMessageId ?? undefined,
+      conversation_id: pending?.conversationId ?? conversationId ?? undefined,
+      document_id: document._id,
+      partial_answer_length: pending?.assistantContent.length ?? 0,
+    });
     // Stop visual streaming immediately for responsiveness.
     setPendingExchange((cur) => (cur ? { ...cur, isStreaming: false } : cur));
 
@@ -767,23 +836,37 @@ function ChatBody({
       setPendingExchange(null);
     }
     abortRef.current?.abort();
-  }, [stopGeneration]);
+  }, [conversationId, document._id, stopGeneration]);
 
   const handleRegenerate = useCallback(
     (assistantMessageId: Id<"messages">) => {
       if (isGenerating) return;
+      captureEvent("chat_regenerate_requested", {
+        assistant_message_id: assistantMessageId,
+        conversation_id: conversationId ?? undefined,
+        document_id: document._id,
+      });
       void runGeneration({
         regenerate: true,
         expectedAssistantMessageId: assistantMessageId,
       });
     },
-    [isGenerating, runGeneration],
+    [conversationId, document._id, isGenerating, runGeneration],
   );
 
-  const handleSuggestedPrompt = useCallback((text: string) => {
-    setInput(text);
-    textareaRef.current?.focus();
-  }, []);
+  const handleSuggestedPrompt = useCallback(
+    (prompt: (typeof SUGGESTED_PROMPTS)[number]) => {
+      const text = prompt.build(currentPage);
+      captureEvent("suggested_prompt_selected", {
+        current_page: currentPage,
+        document_id: document._id,
+        prompt_id: prompt.id,
+      });
+      setInput(text);
+      textareaRef.current?.focus();
+    },
+    [currentPage, document._id],
+  );
 
   const persistedMessages = messages ?? [];
   const displayMessages: ChatMessageItem[] = persistedMessages.map(
@@ -918,7 +1001,7 @@ function ChatBody({
               <button
                 key={p.id}
                 className="focus-ring inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-xs text-stone-300 transition-colors hover:border-amber-400/25 hover:bg-amber-500/[0.06] hover:text-amber-200"
-                onClick={() => handleSuggestedPrompt(p.build(currentPage))}
+                onClick={() => handleSuggestedPrompt(p)}
                 type="button"
               >
                 <HugeiconsIcon
