@@ -15,27 +15,34 @@ const PROVIDER_STRATEGY: Record<Provider, "oauth_google" | "oauth_github"> = {
 };
 
 export function AuthCard() {
-  const { signIn } = useSignIn();
+  const { fetchStatus, signIn } = useSignIn();
   const [pendingProvider, setPendingProvider] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shouldReduceMotion = useReducedMotion();
+  const authIsReady = Boolean(signIn) && fetchStatus === "idle";
 
   const handleSocialAuth = async (provider: Provider) => {
+    if (!signIn) {
+      setError("Authentication is still loading. Please try again.");
+      return;
+    }
+
     setPendingProvider(provider);
     setError(null);
 
     try {
-      await signIn.sso({
+      const result = await signIn.sso({
         strategy: PROVIDER_STRATEGY[provider],
         redirectUrl: "/dashboard",
         redirectCallbackUrl: "/sso-callback",
       });
+
+      if (result.error) {
+        setError(getAuthErrorMessage(result.error));
+        setPendingProvider(null);
+      }
     } catch (authError) {
-      setError(
-        authError instanceof Error
-          ? authError.message
-          : "Authentication failed.",
-      );
+      setError(getAuthErrorMessage(authError));
       setPendingProvider(null);
     }
   };
@@ -58,14 +65,14 @@ export function AuthCard() {
 
         <div className="mt-8 w-full space-y-3">
           <SocialButton
-            disabled={pendingProvider !== null}
+            disabled={!authIsReady || pendingProvider !== null}
             label="Continue with Google"
             onClick={() => handleSocialAuth("google")}
             provider="google"
             pending={pendingProvider === "google"}
           />
           <SocialButton
-            disabled={pendingProvider !== null}
+            disabled={!authIsReady || pendingProvider !== null}
             label="Continue with GitHub"
             onClick={() => handleSocialAuth("github")}
             provider="github"
@@ -84,6 +91,34 @@ export function AuthCard() {
       </div>
     </motion.div>
   );
+}
+
+function getAuthErrorMessage(authError: unknown) {
+  if (authError instanceof Error) {
+    return authError.message;
+  }
+
+  if (authError && typeof authError === "object") {
+    const { code, longMessage, message } = authError as {
+      code?: unknown;
+      longMessage?: unknown;
+      message?: unknown;
+    };
+
+    if (typeof longMessage === "string") {
+      return longMessage;
+    }
+
+    if (typeof message === "string") {
+      return message;
+    }
+
+    if (typeof code === "string") {
+      return `Authentication failed (${code}).`;
+    }
+  }
+
+  return "Authentication failed.";
 }
 
 function SocialButton({

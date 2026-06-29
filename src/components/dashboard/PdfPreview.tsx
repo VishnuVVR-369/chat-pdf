@@ -1,11 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  getDocument,
-  GlobalWorkerOptions,
-  TextLayer,
-} from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist/types/src/pdf";
 
 type PdfPreviewProps = {
@@ -36,18 +31,29 @@ const SOFT_HYPHEN = /­/g;
 const MIN_PREFIX_FALLBACK = 12;
 const MAX_PREFIX_FALLBACK = 40;
 
-let workerConfigured = false;
+type PdfJsModule = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
+type PdfLoadingTask = ReturnType<PdfJsModule["getDocument"]>;
+type PdfTextLayer = InstanceType<PdfJsModule["TextLayer"]>;
 
-function ensurePdfWorkerConfigured() {
-  if (workerConfigured || typeof window === "undefined") {
-    return;
+let workerConfigured = false;
+let pdfJsModulePromise: Promise<PdfJsModule> | null = null;
+
+async function loadPdfJs() {
+  if (!pdfJsModulePromise) {
+    pdfJsModulePromise = import("pdfjs-dist/legacy/build/pdf.mjs");
   }
 
-  GlobalWorkerOptions.workerSrc = new URL(
-    "pdfjs-dist/legacy/build/pdf.worker.mjs",
-    import.meta.url,
-  ).toString();
-  workerConfigured = true;
+  const pdfJs = await pdfJsModulePromise;
+
+  if (!workerConfigured) {
+    pdfJs.GlobalWorkerOptions.workerSrc = new URL(
+      "pdfjs-dist/legacy/build/pdf.worker.mjs",
+      import.meta.url,
+    ).toString();
+    workerConfigured = true;
+  }
+
+  return pdfJs;
 }
 
 function getPdfLoadErrorMessage(error: unknown) {
@@ -314,10 +320,8 @@ export function PdfPreview({
       return;
     }
 
-    ensurePdfWorkerConfigured();
-
     let cancelled = false;
-    let loadingTask: ReturnType<typeof getDocument> | null = null;
+    let loadingTask: PdfLoadingTask | null = null;
 
     async function loadDocument() {
       setPdfDocument(null);
@@ -325,16 +329,17 @@ export function PdfPreview({
       setIsLoadingDocument(true);
       setError(null);
 
-      const source = file
-        ? { data: new Uint8Array(await file.arrayBuffer()) }
-        : { url: url ?? undefined };
-
       try {
+        const pdfJs = await loadPdfJs();
+        const source = file
+          ? { data: new Uint8Array(await file.arrayBuffer()) }
+          : { url: url ?? undefined };
+
         let attempt = 0;
 
         while (!cancelled) {
           try {
-            loadingTask = getDocument({
+            loadingTask = pdfJs.getDocument({
               ...source,
               isEvalSupported: false,
               stopAtErrors: true,
@@ -397,7 +402,7 @@ export function PdfPreview({
     const activeDocument = pdfDocument;
     let cancelled = false;
     let renderTask: RenderTask | null = null;
-    let textLayer: TextLayer | null = null;
+    let textLayer: PdfTextLayer | null = null;
 
     async function renderPage() {
       setIsRenderingPage(true);
@@ -406,6 +411,7 @@ export function PdfPreview({
       setHighlightBoxes([]);
 
       try {
+        const pdfJs = await loadPdfJs();
         const safePageNumber = Math.min(
           Math.max(pageNumber, 1),
           activeDocument.numPages,
@@ -485,7 +491,7 @@ export function PdfPreview({
         if (cancelled) {
           return;
         }
-        textLayer = new TextLayer({
+        textLayer = new pdfJs.TextLayer({
           textContentSource: textContent,
           container: textLayerEl,
           viewport,
