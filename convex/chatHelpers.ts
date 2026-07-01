@@ -1,7 +1,10 @@
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { modelSupportsTemperature } from "./modelCapabilities";
+import {
+  modelSupportsTemperature,
+  resolveRoutingReasoningEffort,
+} from "./modelCapabilities";
 
 /* ─── Constants ─────────────────────────────────────────────────── */
 
@@ -566,6 +569,7 @@ async function fetchRoutingDecision(
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
   const model = process.env.OPENAI_CHAT_MODEL ?? "gpt-5.4-mini";
+  const routingReasoningEffort = resolveRoutingReasoningEffort(model);
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -577,6 +581,11 @@ async function fetchRoutingDecision(
     body: JSON.stringify({
       model,
       ...(modelSupportsTemperature(model) ? { temperature: 0 } : {}),
+      // Routing is a trivial classification; keep it fast so it doesn't dominate
+      // time-to-first-token ahead of the streamed answer.
+      ...(routingReasoningEffort
+        ? { reasoning_effort: routingReasoningEffort }
+        : {}),
       response_format: routingDecisionFormat,
       messages: [
         {
@@ -636,6 +645,13 @@ export async function routeChatQuery(args: {
   signal?: AbortSignal;
 }): Promise<ChatRoutingDecision> {
   const fallback = getFallbackRoutingDecision(args.currentUserMessage);
+
+  // With no prior turns there are no references to resolve, so the LLM router adds
+  // nothing over the heuristic — skip its (reasoning-model) round-trip entirely so
+  // the first answer starts streaming sooner.
+  if (args.history.length === 0) {
+    return fallback;
+  }
 
   try {
     const parsed = await fetchRoutingDecision(
@@ -785,13 +801,29 @@ export function createAnswerExtractor() {
         if (ch === "\\") {
           if (i + 1 >= slice.length) break; // incomplete escape — wait for next chunk
           const next = slice[i + 1];
-          if (next === '"') decoded += '"';
-          else if (next === "\\") decoded += "\\";
-          else if (next === "n") decoded += "\n";
-          else if (next === "t") decoded += "\t";
-          else if (next === "r") decoded += "\r";
-          else decoded += next;
-          i += 2;
+          if (next === "u") {
+            // \uXXXX — need all 4 hex digits before we can decode; wait if they
+            // haven't fully arrived yet so we never emit a half-formed escape.
+            if (i + 6 > slice.length) break;
+            const hex = slice.slice(i + 2, i + 6);
+            if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+              // fromCharCode keeps surrogate halves intact, so paired 😀
+              // escapes concatenate back into the correct character.
+              decoded += String.fromCharCode(parseInt(hex, 16));
+              i += 6;
+            } else {
+              decoded += next; // malformed escape — emit literally
+              i += 2;
+            }
+          } else {
+            if (next === '"') decoded += '"';
+            else if (next === "\\") decoded += "\\";
+            else if (next === "n") decoded += "\n";
+            else if (next === "t") decoded += "\t";
+            else if (next === "r") decoded += "\r";
+            else decoded += next;
+            i += 2;
+          }
         } else if (ch === '"') {
           isDone = true;
           i++;

@@ -680,6 +680,9 @@ function ChatBody({
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
+        // Time-to-first-token: proves the answer is actually streaming (vs. landing
+        // in one burst after a long hidden reasoning phase).
+        let firstTokenAt: number | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -727,6 +730,7 @@ function ChatBody({
               }
             } else if (event.type === "token") {
               const tok = event.token as string;
+              if (firstTokenAt === null) firstTokenAt = performance.now();
               setPendingExchange((cur) =>
                 cur
                   ? { ...cur, assistantContent: cur.assistantContent + tok }
@@ -748,6 +752,10 @@ function ChatBody({
                 ),
                 is_regenerate: isRegenerate,
                 question_length: userContent.length,
+                time_to_first_token_ms:
+                  firstTokenAt !== null
+                    ? Math.round(firstTokenAt - generationStartedAt)
+                    : undefined,
               });
               setPendingExchange((cur) => {
                 if (!cur) return null;

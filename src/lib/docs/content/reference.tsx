@@ -325,6 +325,11 @@ export const referenceGroup: DocsGroup = {
                   purpose:
                     "Model for routing, per-page summaries, document summaries, and grounded answer generation. Default is gpt-5.4-mini.",
                 },
+                {
+                  name: "OPENAI_CHAT_REASONING_EFFORT",
+                  purpose:
+                    "Reasoning effort for chat answers on reasoning models (minimal | low | medium | high). Lower effort makes tokens start streaming sooner; clamped to what the model supports. Default is low.",
+                },
               ]}
             />
           ),

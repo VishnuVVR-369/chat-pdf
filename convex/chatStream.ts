@@ -1,7 +1,10 @@
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { modelSupportsTemperature } from "./modelCapabilities";
+import {
+  modelSupportsTemperature,
+  resolveChatReasoningEffort,
+} from "./modelCapabilities";
 import {
   MAX_HISTORY_MESSAGES,
   buildSummarySources,
@@ -56,6 +59,10 @@ async function streamStructuredAnswer(args: {
   signal?: AbortSignal;
   onToken: (token: string) => void;
 }) {
+  // Cap hidden reasoning so the answer starts streaming promptly instead of
+  // stalling on a long think phase (the main reason streaming looked absent).
+  const reasoningEffort = resolveChatReasoningEffort(args.model);
+
   const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     signal: args.signal,
@@ -69,6 +76,7 @@ async function streamStructuredAnswer(args: {
       ...(modelSupportsTemperature(args.model)
         ? { temperature: args.temperature }
         : {}),
+      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       response_format: args.responseFormat,
       stream: true,
     }),
