@@ -214,7 +214,7 @@ export const platformGroup: DocsGroup = {
       quickFacts: [
         { label: "Vector weight", value: "0.65" },
         { label: "Lexical weight", value: "0.35" },
-        { label: "Final chunks", value: "Top 6" },
+        { label: "Final chunks", value: "Top 10 + neighbors" },
       ],
       sections: [
         {
@@ -258,8 +258,8 @@ export const platformGroup: DocsGroup = {
               </p>
               <BulletList
                 items={[
-                  "Vector search over chunk embeddings — top 12, filtered to the document.",
-                  "Convex full-text search over chunk text using extracted keyword terms — top 12.",
+                  "Vector search over chunk embeddings — top 24, filtered to the document.",
+                  "Convex full-text search over chunk text using extracted keyword terms — top 24.",
                   "Results are merged by chunk id into a single candidate pool.",
                 ]}
               />
@@ -289,7 +289,8 @@ export const platformGroup: DocsGroup = {
   + 0.35 / (60 + lexicalRank)    // keyword
   + 0.10 * keywordOverlapRatio   // literal-term bonus
 
-// k = 60, then keep the top 6 chunks`}</CodeBlock>
+// k = 60, then keep the top 10 chunks
+// Neighbor chunks around the strongest hits are added as extra context`}</CodeBlock>
               <ScoreBar
                 caption="Relative contribution of each retriever to the fused score (k = 60)."
                 rows={[
@@ -307,16 +308,18 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                The top six chunks become labeled sources in the model prompt.
-                The model returns a structured answer with quotes, and every
-                quote is checked before it is shown.
+                The top ten chunks are selected by score, nearby chunks around
+                the strongest hits are added as extra context, and the final
+                labeled sources are ordered by document position. The model
+                returns a structured answer with quotes, and every quote is
+                checked before it is shown.
               </p>
               <StepList
                 items={[
                   {
-                    title: "Verbatim match",
+                    title: "Quote match",
                     description:
-                      "Each quote must be a contiguous substring of its cited chunk; non-matching quotes are dropped.",
+                      "Each quote is matched against its cited chunk exactly first, then with normalized markdown, punctuation, and high-threshold fuzzy matching.",
                   },
                   {
                     title: "Resolve the page",

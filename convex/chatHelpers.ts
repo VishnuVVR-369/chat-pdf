@@ -8,13 +8,17 @@ import {
 
 /* ─── Constants ─────────────────────────────────────────────────── */
 
-export const HYBRID_VECTOR_LIMIT = 12;
-export const HYBRID_SEARCH_LIMIT = 12;
-export const FINAL_CHUNK_LIMIT = 6;
+export const HYBRID_VECTOR_LIMIT = 24;
+export const HYBRID_SEARCH_LIMIT = 24;
+export const FINAL_CHUNK_LIMIT = 10;
+export const NEIGHBOR_CONTEXT_TOP_CHUNK_LIMIT = 3;
+export const NEIGHBOR_CONTEXT_RADIUS = 1;
 export const MAX_HISTORY_MESSAGES = 20;
 export const ROUTING_HISTORY_MESSAGES = 4;
 export const RANK_FUSION_K = 60;
 export const MAX_CITATIONS = 4;
+const FUZZY_CITATION_MIN_CHARS = 24;
+const FUZZY_CITATION_MATCH_RATIO = 0.9;
 const SUMMARY_ROUTE_PATTERNS = [
   /\bsummar(?:ize|y)\b/i,
   /\boverview\b/i,
@@ -199,6 +203,206 @@ export type SummaryCitation = {
 
 export function normalizeWhitespace(text: string) {
   return text.trim().replace(/\s+/g, " ");
+}
+
+type NormalizedCitationText = {
+  text: string;
+  offsets: number[];
+};
+
+type CitationQuoteMatch = {
+  startOffset: number;
+  endOffset: number;
+};
+
+function foldCitationCharacter(char: string): string {
+  switch (char) {
+    case "\u2018":
+    case "\u2019":
+    case "\u201A":
+    case "\u201B":
+    case "\u2032":
+      return "'";
+    case "\u201C":
+    case "\u201D":
+    case "\u201E":
+    case "\u201F":
+    case "\u2033":
+      return '"';
+    case "\u2010":
+    case "\u2011":
+    case "\u2012":
+    case "\u2013":
+    case "\u2014":
+    case "\u2212":
+      return "-";
+    case "\u2026":
+      return "...";
+    case "\u00A0":
+    case "\u2007":
+    case "\u202F":
+      return " ";
+    case "\uFB00":
+      return "ff";
+    case "\uFB01":
+      return "fi";
+    case "\uFB02":
+      return "fl";
+    case "\uFB03":
+      return "ffi";
+    case "\uFB04":
+      return "ffl";
+    default:
+      return char.normalize("NFKC").toLowerCase();
+  }
+}
+
+function normalizeCitationTextWithOffsets(
+  text: string,
+): NormalizedCitationText {
+  let normalized = "";
+  const offsets: number[] = [];
+  let previousWasWhitespace = true;
+
+  for (let index = 0; index < text.length; ) {
+    const codePoint = text.codePointAt(index)!;
+    const charLength = codePoint > 0xffff ? 2 : 1;
+    const folded = foldCitationCharacter(text.slice(index, index + charLength));
+
+    index += charLength;
+
+    if (/[*_`~$]/.test(folded)) continue;
+
+    const value = folded === "|" ? " " : folded;
+
+    for (const outputChar of value) {
+      if (/\s/.test(outputChar)) {
+        if (!previousWasWhitespace) {
+          normalized += " ";
+          offsets.push(index - charLength);
+          previousWasWhitespace = true;
+        }
+        continue;
+      }
+
+      normalized += outputChar;
+      offsets.push(index - charLength);
+      previousWasWhitespace = false;
+    }
+  }
+
+  if (normalized.endsWith(" ")) {
+    normalized = normalized.slice(0, -1);
+    offsets.pop();
+  }
+
+  return { text: normalized, offsets };
+}
+
+function resolveNormalizedRange(
+  normalized: NormalizedCitationText,
+  start: number,
+  length: number,
+): CitationQuoteMatch | null {
+  if (length <= 0) return null;
+  const startOffset = normalized.offsets[start];
+  const endOffset = normalized.offsets[start + length - 1];
+
+  if (startOffset === undefined || endOffset === undefined) return null;
+
+  return {
+    startOffset,
+    endOffset: endOffset + 1,
+  };
+}
+
+function findLongestCommonSubstring(
+  text: string,
+  quote: string,
+): { textStart: number; length: number } {
+  let previous = new Array(quote.length + 1).fill(0) as number[];
+  let bestLength = 0;
+  let bestTextEnd = 0;
+
+  for (let textIndex = 1; textIndex <= text.length; textIndex += 1) {
+    const current = new Array(quote.length + 1).fill(0) as number[];
+
+    for (let quoteIndex = 1; quoteIndex <= quote.length; quoteIndex += 1) {
+      if (text[textIndex - 1] === quote[quoteIndex - 1]) {
+        const length = previous[quoteIndex - 1] + 1;
+        current[quoteIndex] = length;
+
+        if (length > bestLength) {
+          bestLength = length;
+          bestTextEnd = textIndex;
+        }
+      }
+    }
+
+    previous = current;
+  }
+
+  return {
+    textStart: bestTextEnd - bestLength,
+    length: bestLength,
+  };
+}
+
+function findCitationQuoteMatch(
+  chunkText: string,
+  rawQuote: string,
+): CitationQuoteMatch | null {
+  const trimmedQuote = rawQuote.trim();
+  if (!trimmedQuote) return null;
+
+  const rawStart = chunkText.indexOf(trimmedQuote);
+  if (rawStart >= 0) {
+    return {
+      startOffset: rawStart,
+      endOffset: rawStart + trimmedQuote.length,
+    };
+  }
+
+  const whitespaceQuote = normalizeWhitespace(rawQuote);
+  const whitespaceStart = chunkText.indexOf(whitespaceQuote);
+  if (whitespaceStart >= 0) {
+    return {
+      startOffset: whitespaceStart,
+      endOffset: whitespaceStart + whitespaceQuote.length,
+    };
+  }
+
+  const normalizedChunk = normalizeCitationTextWithOffsets(chunkText);
+  const normalizedQuote = normalizeCitationTextWithOffsets(rawQuote).text;
+  if (!normalizedQuote) return null;
+
+  const normalizedStart = normalizedChunk.text.indexOf(normalizedQuote);
+  if (normalizedStart >= 0) {
+    return resolveNormalizedRange(
+      normalizedChunk,
+      normalizedStart,
+      normalizedQuote.length,
+    );
+  }
+
+  if (normalizedQuote.length < FUZZY_CITATION_MIN_CHARS) return null;
+
+  const fuzzyMatch = findLongestCommonSubstring(
+    normalizedChunk.text,
+    normalizedQuote,
+  );
+  if (
+    fuzzyMatch.length <
+    Math.ceil(normalizedQuote.length * FUZZY_CITATION_MATCH_RATIO)
+  ) {
+    return null;
+  }
+
+  return resolveNormalizedRange(
+    normalizedChunk,
+    fuzzyMatch.textStart,
+    fuzzyMatch.length,
+  );
 }
 
 export function extractKeywordTerms(query: string) {
@@ -431,10 +635,11 @@ export function buildValidatedChunkCitations(
     const quote = normalizeWhitespace(rawCitation.quote);
     if (!quote) continue;
 
-    const quoteStartOffset = chunk.text.indexOf(quote);
-    if (quoteStartOffset < 0) continue;
+    const quoteMatch = findCitationQuoteMatch(chunk.text, rawCitation.quote);
+    if (!quoteMatch) continue;
 
-    const quoteEndOffset = quoteStartOffset + quote.length;
+    const { startOffset: quoteStartOffset, endOffset: quoteEndOffset } =
+      quoteMatch;
     const dedupeKey = `${chunk._id}:${quoteStartOffset}:${quoteEndOffset}`;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -540,6 +745,62 @@ export function rerankChunks(
     .sort((a, b) => b.hybridScore - a.hybridScore)
     .slice(0, FINAL_CHUNK_LIMIT)
     .map((chunk, index) => ({ ...chunk, sourceId: `S${index + 1}` }));
+}
+
+export function buildNeighborChunkIndexes(chunks: RankedChunk[]) {
+  const selectedChunkIndexes = new Set(chunks.map((chunk) => chunk.chunkIndex));
+  const neighborIndexes = new Set<number>();
+
+  for (const chunk of chunks.slice(0, NEIGHBOR_CONTEXT_TOP_CHUNK_LIMIT)) {
+    for (
+      let delta = -NEIGHBOR_CONTEXT_RADIUS;
+      delta <= NEIGHBOR_CONTEXT_RADIUS;
+      delta += 1
+    ) {
+      if (delta === 0) continue;
+
+      const chunkIndex = chunk.chunkIndex + delta;
+      if (chunkIndex < 0 || selectedChunkIndexes.has(chunkIndex)) continue;
+
+      neighborIndexes.add(chunkIndex);
+    }
+  }
+
+  return Array.from(neighborIndexes);
+}
+
+export function orderChunksForPrompt(chunks: RankedChunk[]) {
+  return chunks
+    .slice()
+    .sort(
+      (a, b) =>
+        a.chunkIndex - b.chunkIndex ||
+        b.hybridScore - a.hybridScore ||
+        String(a._id).localeCompare(String(b._id)),
+    )
+    .map((chunk, index) => ({ ...chunk, sourceId: `S${index + 1}` }));
+}
+
+export function mergeNeighborContext(
+  selectedChunks: RankedChunk[],
+  neighborChunks: RetrievedChunk[],
+) {
+  const chunksById = new Map<Id<"documentChunks">, RankedChunk>();
+
+  for (const chunk of selectedChunks) {
+    chunksById.set(chunk._id, chunk);
+  }
+
+  for (const chunk of neighborChunks) {
+    if (chunksById.has(chunk._id)) continue;
+    chunksById.set(chunk._id, {
+      ...chunk,
+      hybridScore: 0,
+      sourceId: "",
+    });
+  }
+
+  return orderChunksForPrompt(Array.from(chunksById.values()));
 }
 
 export function shouldRouteToSummaries(query: string) {
@@ -756,12 +1017,28 @@ export async function getChunkRetrievalContext(
     chunkIds: candidateIds,
   });
 
-  return rerankChunks(
+  const selectedChunks = rerankChunks(
     args.query,
     chunks,
     vectorResults.map((r) => r._id),
     lexicalIds,
   );
+
+  const neighborChunkIndexes = buildNeighborChunkIndexes(selectedChunks);
+  if (neighborChunkIndexes.length === 0) {
+    return orderChunksForPrompt(selectedChunks);
+  }
+
+  const neighborChunks = await ctx.runQuery(
+    internal.chatData.getDocumentChunksByIndexes,
+    {
+      documentId: args.documentId,
+      ownerTokenIdentifier: args.ownerTokenIdentifier,
+      chunkIndexes: neighborChunkIndexes,
+    },
+  );
+
+  return mergeNeighborContext(selectedChunks, neighborChunks);
 }
 
 /* ─── Streaming JSON parser ──────────────────────────────────────── */

@@ -306,11 +306,12 @@ export const usingChatPdfGroup: DocsGroup = {
                 type="check"
                 title="Citations are validated, not trusted"
               >
-                In chunks mode, each quote the model returns must be a verbatim,
-                contiguous substring of its cited chunk. Quotes that do not
-                match are dropped, and the citing page is resolved from the
-                chunk’s page spans. Up to four citations are attached per
-                answer.
+                In chunks mode, each quote the model returns is validated
+                against its cited chunk. Exact matches are preferred, with
+                normalized and high-threshold fuzzy matching as fallbacks for
+                OCR markdown and punctuation differences. The citing page is
+                resolved from the chunk’s page spans. Up to four citations are
+                attached per answer.
               </Callout>
             </>
           ),

@@ -534,6 +534,63 @@ export const getDocumentChunks = internalQuery({
   },
 });
 
+export const getDocumentChunksByIndexes = internalQuery({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    chunkIndexes: v.array(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("documentChunks"),
+      chunkIndex: v.number(),
+      startPageNumber: v.number(),
+      endPageNumber: v.number(),
+      text: v.string(),
+      tokenCount: v.number(),
+      pageSpans: v.array(
+        v.object({
+          pageNumber: v.number(),
+          startOffset: v.number(),
+          endOffset: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const chunkIndexes = Array.from(new Set(args.chunkIndexes)).filter(
+      (chunkIndex) => chunkIndex >= 0,
+    );
+
+    const chunks = await Promise.all(
+      chunkIndexes.map((chunkIndex) =>
+        ctx.db
+          .query("documentChunks")
+          .withIndex("by_documentId_and_chunkIndex", (q) =>
+            q.eq("documentId", args.documentId).eq("chunkIndex", chunkIndex),
+          )
+          .unique(),
+      ),
+    );
+
+    return chunks.flatMap((chunk) =>
+      chunk && chunk.ownerTokenIdentifier === args.ownerTokenIdentifier
+        ? [
+            {
+              _id: chunk._id,
+              chunkIndex: chunk.chunkIndex,
+              startPageNumber: chunk.startPageNumber,
+              endPageNumber: chunk.endPageNumber,
+              text: chunk.text,
+              tokenCount: chunk.tokenCount,
+              pageSpans: chunk.pageSpans,
+            },
+          ]
+        : [],
+    );
+  },
+});
+
 export const listConversationsForDocument = query({
   args: {
     documentId: v.id("documents"),
