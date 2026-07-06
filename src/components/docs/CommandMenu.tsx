@@ -13,6 +13,7 @@ type DocsSearchItem = {
   description: string;
   group: string;
   href: string;
+  searchText: string;
 };
 
 type CommandMenuProps = {
@@ -34,9 +35,7 @@ export function CommandMenu({ items, className }: CommandMenuProps) {
       return items;
     }
     return items.filter((item) =>
-      `${item.title} ${item.description} ${item.group}`
-        .toLowerCase()
-        .includes(value),
+      item.searchText.toLowerCase().includes(value),
     );
   }, [items, query]);
 

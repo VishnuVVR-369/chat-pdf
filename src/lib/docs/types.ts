@@ -38,4 +38,5 @@ export type DocsSearchItem = {
   description: string;
   group: string;
   href: string;
+  searchText: string;
 };
