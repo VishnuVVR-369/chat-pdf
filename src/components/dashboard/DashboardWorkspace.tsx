@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { ChatPanel } from "./ChatPanel";
+import { GuestSessionBanner } from "./GuestSessionBanner";
 import { PdfViewer } from "./PdfViewer";
 import { PipelineStepper } from "./PipelineStepper";
 import { Sidebar } from "./Sidebar";
@@ -25,6 +26,7 @@ import { UploadModal } from "./UploadModal";
 
 type DashboardWorkspaceProps = {
   email: string | null | undefined;
+  isGuest: boolean;
   name: string | null | undefined;
   userId: string;
 };
@@ -55,6 +57,7 @@ function readRecentDocumentId(): string | null {
 
 export function DashboardWorkspace({
   email,
+  isGuest,
   name,
   userId,
 }: DashboardWorkspaceProps) {
@@ -439,7 +442,7 @@ export function DashboardWorkspace({
   );
 
   return (
-    <main className="surface-base relative h-screen overflow-hidden text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
+    <main className="surface-base relative flex h-screen flex-col overflow-hidden text-stone-100 selection:bg-amber-500/30 selection:text-amber-200">
       <UploadModal
         isOpen={isUploadModalOpen}
         initialFile={dropZoneFile}
@@ -465,7 +468,9 @@ export function DashboardWorkspace({
         }}
       />
 
-      <div className="flex h-full">
+      <GuestSessionBanner isGuest={isGuest} />
+
+      <div className="flex min-h-0 flex-1">
         {/* Mobile sidebar overlay */}
         {isMobileSidebarOpen && (
           <div className="fixed inset-0 z-40 lg:hidden">

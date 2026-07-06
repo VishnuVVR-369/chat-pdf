@@ -12,7 +12,17 @@ export default async function DashboardPage() {
   const email =
     user.primaryEmailAddress?.emailAddress ??
     user.emailAddresses[0]?.emailAddress;
-  const name = user.fullName ?? user.username ?? user.firstName;
+  const isGuest = user.publicMetadata.isGuest === true;
+  const name = isGuest
+    ? "Guest User"
+    : (user.fullName ?? user.username ?? user.firstName);
 
-  return <DashboardWorkspace email={email} name={name} userId={user.id} />;
+  return (
+    <DashboardWorkspace
+      email={email}
+      isGuest={isGuest}
+      name={name}
+      userId={user.id}
+    />
+  );
 }

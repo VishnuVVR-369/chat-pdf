@@ -99,9 +99,21 @@ Copy `.env.example` to `.env.local` and provide values for:
 - `MISTRAL_OCR_MODEL`
 - `NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN`
 - `NEXT_PUBLIC_POSTHOG_HOST`
+- `UPSTASH_REDIS_REST_URL` (optional locally; recommended for guest sign-in rate limits)
+- `UPSTASH_REDIS_REST_TOKEN` (optional locally; recommended for guest sign-in rate limits)
+- `GUEST_SIGN_IN_EMAIL_DOMAIN` (optional; when empty, guest users are created with usernames)
+- `GUEST_SIGN_IN_RATE_LIMIT_MAX` (optional, defaults to 5)
+- `GUEST_SIGN_IN_RATE_LIMIT_WINDOW_SECONDS` (optional, defaults to 3600)
+- `GUEST_SIGN_IN_GLOBAL_RATE_LIMIT_MAX` (optional, defaults to 100)
+- `GUEST_SIGN_IN_GLOBAL_RATE_LIMIT_WINDOW_SECONDS` (optional, defaults to 3600)
 
 `NEXT_PUBLIC_POSTHOG_KEY` is still supported as a fallback alias for existing
 local environments.
+
+Guest sign-in creates a real Clerk user and signs in with a one-time sign-in
+token, so the normal Convex JWT ownership checks continue to work. Leave
+`GUEST_SIGN_IN_EMAIL_DOMAIN` empty to create username-only guest users; if you
+set it, enable Email address identification in the Clerk dashboard.
 
 ### Clerk JWT template
 

@@ -241,7 +241,7 @@ export function LandingPage() {
                 asChild
                 className="rounded-full bg-amber-500 px-4 font-semibold text-[#070707] hover:bg-amber-400 sm:px-5"
               >
-                <Link href="/sign-in">Get started</Link>
+                <Link href="/guest-sign-in">Sign in as guest</Link>
               </Button>
             </div>
           </nav>
@@ -292,7 +292,7 @@ export function LandingPage() {
               size="lg"
               className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] shadow-[0_25px_60px_-24px_rgba(245,158,11,0.95)] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
             >
-              <Link href="/sign-in">Start for free</Link>
+              <Link href="/guest-sign-in">Try as guest</Link>
             </Button>
             <Button
               asChild
@@ -300,12 +300,13 @@ export function LandingPage() {
               variant="outline"
               className="h-12 w-full rounded-full border-stone-700 bg-stone-900/35 px-8 text-base text-stone-300 hover:bg-stone-800/60 hover:text-stone-100 sm:w-auto"
             >
-              <Link href="/docs">Read the docs</Link>
+              <Link href="/sign-in">Sign in normally</Link>
             </Button>
           </motion.div>
 
           <motion.p variants={fadeUp} className="mt-5 text-xs text-stone-600">
-            Sign in with Google or GitHub · No credit card required
+            Guest sessions are rate-limited · Google and GitHub sign-in still
+            available
           </motion.p>
 
           <motion.div
@@ -650,10 +651,10 @@ export function LandingPage() {
                 size="lg"
                 className="h-12 w-full rounded-full bg-amber-500 px-8 text-base font-semibold text-[#070707] transition-shadow hover:bg-amber-400 hover:shadow-[0_30px_80px_-20px_rgba(245,158,11,0.7)] sm:w-auto"
               >
-                <Link href="/sign-in">Get started free</Link>
+                <Link href="/guest-sign-in">Open guest demo</Link>
               </Button>
               <span className="text-xs text-stone-600">
-                No credit card · 30-second setup
+                Rate-limited guest sessions
               </span>
             </div>
           </div>
@@ -688,6 +689,11 @@ export function LandingPage() {
                 <li>
                   <Link href="/sign-in" className="hover:text-stone-200">
                     Sign in
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/guest-sign-in" className="hover:text-stone-200">
+                    Guest sign in
                   </Link>
                 </li>
               </ul>

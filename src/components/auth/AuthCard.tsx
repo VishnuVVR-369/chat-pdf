@@ -3,6 +3,7 @@
 import { useSignIn } from "@clerk/nextjs";
 import { useState } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import Link from "next/link";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -78,6 +79,13 @@ export function AuthCard() {
             provider="github"
             pending={pendingProvider === "github"}
           />
+          <Button
+            asChild
+            className="h-12 w-full justify-center rounded-2xl border-amber-400/20 bg-amber-400 text-sm font-semibold text-[#090909] shadow-[0_16px_40px_-18px_rgba(245,158,11,0.75)] transition-[background-color,transform] hover:bg-amber-300"
+            size="lg"
+          >
+            <Link href="/guest-sign-in">Sign in as guest</Link>
+          </Button>
         </div>
 
         {error ? (
