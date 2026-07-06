@@ -1,13 +1,186 @@
 import {
+  BubbleChatIcon,
+  File01Icon,
+  FileEditIcon,
+  Layers01Icon,
+  QuoteDownIcon,
+} from "@hugeicons/core-free-icons";
+
+import {
   Accordion,
   BulletList,
   Callout,
   Diagram,
   EnvTable,
   FieldTable,
+  SchemaDiagram,
 } from "@/components/docs/mdx";
+import type { SchemaRelation, SchemaTable } from "@/components/docs/mdx";
 import { dataModelDiagram } from "../diagrams";
 import type { DocsGroup } from "../types";
+
+const schemaTables: SchemaTable[] = [
+  {
+    name: "documents",
+    icon: File01Icon,
+    summary: "One row per uploaded PDF; tracks its lifecycle and artifacts.",
+    columns: [
+      { name: "_id", type: "id", badges: ["pk"] },
+      {
+        name: "ownerTokenIdentifier",
+        type: "string",
+        badges: ["owner", "index"],
+      },
+      { name: "title", type: "string" },
+      { name: "originalFilename", type: "string" },
+      { name: "sha256", type: "string" },
+      {
+        name: "fileStorageId",
+        type: "id",
+        ref: "_storage",
+        badges: ["fk"],
+        optional: true,
+      },
+      { name: "status", type: "union", badges: ["index"] },
+      { name: "pageCount", type: "number", optional: true },
+      { name: "documentSummary", type: "string" },
+      { name: "processingError", type: "string", optional: true },
+      { name: "lastProcessedAt", type: "number", optional: true },
+      { name: "embeddedChunkCount", type: "number", optional: true },
+    ],
+  },
+  {
+    name: "documentPages",
+    icon: FileEditIcon,
+    summary: "OCR text and a summary for a single page of a document.",
+    columns: [
+      { name: "_id", type: "id", badges: ["pk"] },
+      {
+        name: "documentId",
+        type: "id",
+        ref: "documents",
+        badges: ["fk", "index"],
+      },
+      {
+        name: "ownerTokenIdentifier",
+        type: "string",
+        badges: ["owner", "index"],
+      },
+      { name: "pageNumber", type: "number", badges: ["index"] },
+      { name: "extractedText", type: "string" },
+      { name: "summary", type: "string" },
+      {
+        name: "embedding",
+        type: "float64[1536]",
+        badges: ["vector"],
+        optional: true,
+      },
+    ],
+  },
+  {
+    name: "documentChunks",
+    icon: Layers01Icon,
+    summary: "The retrieval unit — overlapping text windows with page spans.",
+    columns: [
+      { name: "_id", type: "id", badges: ["pk"] },
+      {
+        name: "documentId",
+        type: "id",
+        ref: "documents",
+        badges: ["fk", "index"],
+      },
+      {
+        name: "ownerTokenIdentifier",
+        type: "string",
+        badges: ["owner", "index"],
+      },
+      { name: "chunkIndex", type: "number", badges: ["index"] },
+      { name: "startPageNumber", type: "number" },
+      { name: "endPageNumber", type: "number" },
+      { name: "text", type: "string", badges: ["search"] },
+      { name: "tokenCount", type: "number" },
+      { name: "pageSpans", type: "object[]" },
+      { name: "embedding", type: "float64[1536]", badges: ["vector"] },
+    ],
+  },
+  {
+    name: "conversations",
+    icon: BubbleChatIcon,
+    summary: "A chat thread scoped to a single document.",
+    columns: [
+      { name: "_id", type: "id", badges: ["pk"] },
+      {
+        name: "documentId",
+        type: "id",
+        ref: "documents",
+        badges: ["fk", "index"],
+      },
+      {
+        name: "ownerTokenIdentifier",
+        type: "string",
+        badges: ["owner", "index"],
+      },
+      { name: "title", type: "string" },
+    ],
+  },
+  {
+    name: "messages",
+    icon: QuoteDownIcon,
+    summary: "A single turn in a conversation, with validated citations.",
+    columns: [
+      { name: "_id", type: "id", badges: ["pk"] },
+      {
+        name: "conversationId",
+        type: "id",
+        ref: "conversations",
+        badges: ["fk", "index"],
+      },
+      { name: "role", type: "union" },
+      { name: "content", type: "string" },
+      { name: "status", type: "union", optional: true },
+      {
+        name: "citations",
+        type: "object[]",
+        ref: "documentChunks",
+        optional: true,
+      },
+    ],
+  },
+];
+
+const schemaRelations: SchemaRelation[] = [
+  {
+    from: "documents",
+    to: "documentPages",
+    cardinality: "1 : N",
+    label: "each page of the PDF",
+  },
+  {
+    from: "documents",
+    to: "documentChunks",
+    cardinality: "1 : N",
+    label: "retrieval windows",
+  },
+  {
+    from: "documents",
+    to: "conversations",
+    cardinality: "1 : N",
+    label: "chats about the doc",
+  },
+  {
+    from: "conversations",
+    to: "messages",
+    cardinality: "1 : N",
+    label: "turns in a thread",
+  },
+  {
+    from: "documentChunks",
+    to: "messages",
+    cardinality: "0 : N",
+    label: "cited by (citations[].chunkId)",
+    soft: true,
+  },
+];
 
 export const referenceGroup: DocsGroup = {
   title: "Reference",
@@ -21,160 +194,141 @@ export const referenceGroup: DocsGroup = {
         "The Convex tables that back documents, their extracted content, and conversations — plus the indexes that power retrieval.",
       quickFacts: [
         { label: "Tables", value: "5 core" },
+        { label: "Relations", value: "5 foreign keys" },
         { label: "Embeddings", value: "1536-dim" },
         { label: "Indexes", value: "Vector + text" },
       ],
       sections: [
         {
-          id: "relationships",
-          title: "Relationships",
+          id: "schema",
+          title: "Schema at a glance",
           body: (
             <>
               <p>
-                A document owns its extracted pages and chunks, and any
-                conversations started against it. Messages belong to a
-                conversation and can reference the chunks they cite.
+                Five tables back the product. A <code>documents</code> row owns
+                its extracted <code>documentPages</code> and{" "}
+                <code>documentChunks</code>, plus every{" "}
+                <code>conversations</code> thread started against it; each
+                thread owns its <code>messages</code>. Foreign keys are Convex
+                document IDs (<code>v.id(&quot;table&quot;)</code>), and every
+                content row also carries an <code>ownerTokenIdentifier</code>{" "}
+                that authorization filters on for every read.
+              </p>
+              <SchemaDiagram
+                caption="Trimmed to the columns that carry weight — see “Columns trimmed from the design” below for what was removed and why."
+                relations={schemaRelations}
+                tables={schemaTables}
+              />
+            </>
+          ),
+        },
+        {
+          id: "relationships",
+          title: "Entity relationships",
+          body: (
+            <>
+              <p>
+                The same model as an entity-relationship diagram. Solid edges
+                are hard foreign keys; the dashed edge is a soft reference — a
+                message&apos;s <code>citations</code> point back at the{" "}
+                <code>documentChunks</code> they quote.
               </p>
               <Diagram
-                caption="Core tables and their relationships. Every row also carries an owner token for authorization."
+                caption="documents is the aggregate root; conversations → messages is the chat hierarchy. Owner tokens are omitted for readability."
                 chart={dataModelDiagram}
               />
             </>
           ),
         },
         {
-          id: "documents",
-          title: "documents",
+          id: "indexes-fields",
+          title: "Indexes & citation fields",
           body: (
             <>
-              <p>
-                One row per uploaded PDF, tracking its lifecycle and artifacts.
+              <Callout type="note" title="Indexes that power retrieval">
+                <code>documentChunks</code> carries a vector index{" "}
+                <code>by_embedding</code> (1536-dim, filtered by{" "}
+                <code>documentId</code>) and a full-text{" "}
+                <code>search_text</code> index. Hybrid retrieval queries both
+                and fuses the results; <code>documentPages</code> keeps its own
+                vector index for page-level search.
+              </Callout>
+              <p className="mt-5">
+                Two composite fields do the heavy lifting for grounded answers:
               </p>
               <FieldTable
                 rows={[
-                  {
-                    name: "ownerTokenIdentifier",
-                    type: "string",
-                    description:
-                      "Authenticated owner; every query filters on it.",
-                  },
-                  {
-                    name: "status",
-                    type: "union",
-                    description:
-                      "uploading · uploaded · processing · ready · failed.",
-                  },
-                  {
-                    name: "title / originalFilename",
-                    type: "string",
-                    description: "Display title and the uploaded file name.",
-                  },
-                  {
-                    name: "documentSummary",
-                    type: "string",
-                    description: "LLM document summary used in summaries mode.",
-                  },
-                  {
-                    name: "fileStorageId / sha256 / storageSize",
-                    type: "string · number",
-                    description:
-                      "Convex storage id, content hash, and byte size of the stored file.",
-                  },
-                  {
-                    name: "pageCount",
-                    type: "number?",
-                    description: "Detected page count (≤ 100 to process).",
-                  },
-                  {
-                    name: "embeddedChunkCount",
-                    type: "number?",
-                    description: "Chunks embedded once processing succeeds.",
-                  },
-                ]}
-                caption="Abbreviated — OCR provenance and timing fields (ocr*, *CompletedAt, processingAttemptCount) are also stored."
-              />
-            </>
-          ),
-        },
-        {
-          id: "pages-chunks",
-          title: "documentPages & documentChunks",
-          body: (
-            <>
-              <p>
-                Pages hold the OCR text and a summary per page. Chunks are the
-                retrieval unit — overlapping windows of text with the page spans
-                needed to resolve citations.
-              </p>
-              <FieldTable
-                rows={[
-                  {
-                    name: "documentPages.extractedText",
-                    type: "string",
-                    description: "OCR text for a single page.",
-                  },
-                  {
-                    name: "documentPages.summary",
-                    type: "string",
-                    description: "Per-page LLM summary (summaries mode).",
-                  },
-                  {
-                    name: "documentChunks.text",
-                    type: "string",
-                    description: "~450-word chunk with 75-word overlap.",
-                  },
                   {
                     name: "documentChunks.pageSpans",
                     type: "object[]",
                     description:
-                      "Page number + character offsets, used to resolve a quote to a page.",
+                      "{ pageNumber, startOffset, endOffset } — maps any position in a chunk back to a page, so a quote resolves to the page it came from.",
                   },
                   {
-                    name: "embedding",
-                    type: "float64[1536]",
-                    description: "Vector for semantic search (both tables).",
+                    name: "messages.citations",
+                    type: "object[]?",
+                    description:
+                      "Validated citations: pageNumber, snippet, chunkId (→ documentChunks), verbatim quote, and its character offsets.",
                   },
                 ]}
               />
-              <Callout type="note" title="Indexes that power retrieval">
-                <code>documentChunks</code> has a vector index{" "}
-                <code>by_embedding</code> (1536-dim, filtered by document) and a
-                full-text <code>search_text</code> index. Hybrid retrieval
-                queries both and fuses the results.
-              </Callout>
             </>
           ),
         },
         {
-          id: "conversations-messages",
-          title: "conversations & messages",
+          id: "trimmed",
+          title: "Columns trimmed from the design",
           body: (
-            <FieldTable
-              rows={[
-                {
-                  name: "conversations.documentId",
-                  type: "id",
-                  description: "The document this conversation is scoped to.",
-                },
-                {
-                  name: "messages.role",
-                  type: "union",
-                  description: "user or assistant.",
-                },
-                {
-                  name: "messages.content",
-                  type: "string",
-                  description:
-                    "The message text (assistant answers are stored).",
-                },
-                {
-                  name: "messages.citations",
-                  type: "object[]?",
-                  description:
-                    "Validated citations: pageNumber, snippet, chunkId, quote, and offsets.",
-                },
-              ]}
-            />
+            <>
+              <p>
+                The live schema stores extra provenance the design above leaves
+                out. These are safe candidates to drop — they duplicate
+                information already available from <code>status</code>,{" "}
+                <code>_creationTime</code>, or environment config:
+              </p>
+              <BulletList
+                items={[
+                  <>
+                    <code>documents</code>: per-stage timestamps (
+                    <code>uploadCompletedAt</code>,{" "}
+                    <code>processingStartedAt</code>,{" "}
+                    <code>ocrCompletedAt</code>,{" "}
+                    <code>embeddingsCompletedAt</code>) collapse into{" "}
+                    <code>_creationTime</code> + <code>lastProcessedAt</code> +{" "}
+                    <code>status</code>.
+                  </>,
+                  <>
+                    <code>documents</code>: model / provider strings (
+                    <code>summaryModel</code>, <code>embeddingModel</code>,{" "}
+                    <code>ocrModel</code>, <code>ocrMethod</code>,{" "}
+                    <code>ocrProvider</code>) and vendor handles (
+                    <code>mistralFileId</code>, <code>ocrResultStorageId</code>,{" "}
+                    <code>storageContentType</code>,{" "}
+                    <code>processingAttemptCount</code>) are config- or
+                    log-level detail, not query inputs.
+                  </>,
+                  <>
+                    <code>documentPages</code> / <code>documentChunks</code>:{" "}
+                    <code>extractionMethod</code> and per-row{" "}
+                    <code>embeddingModel</code> /{" "}
+                    <code>embeddingTokenCount</code> are constant or derivable;{" "}
+                    <code>ownerDocumentKey</code> duplicates{" "}
+                    <code>ownerTokenIdentifier</code> + <code>documentId</code>.
+                  </>,
+                  <>
+                    <code>conversations</code> / <code>messages</code>: explicit{" "}
+                    <code>createdAt</code> duplicates Convex&apos;s built-in{" "}
+                    <code>_creationTime</code>.
+                  </>,
+                ]}
+              />
+              <Callout type="warning" title="Documentation only">
+                This page shows the trimmed design. The trims are{" "}
+                <strong>not</strong> yet applied to{" "}
+                <code>convex/schema.ts</code> — removing a column also means
+                updating every mutation and query that writes or reads it.
+              </Callout>
+            </>
           ),
         },
       ],

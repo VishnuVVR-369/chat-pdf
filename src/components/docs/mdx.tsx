@@ -18,6 +18,13 @@ export { CodeBlock } from "./CodeBlock";
 export { Tabs } from "./Tabs";
 export { Accordion } from "./Accordion";
 export { Diagram } from "./Diagram";
+export { SchemaDiagram } from "./SchemaDiagram";
+export type {
+  SchemaBadge,
+  SchemaColumn,
+  SchemaRelation,
+  SchemaTable,
+} from "./SchemaDiagram";
 
 type IconType = typeof InformationCircleIcon;
 

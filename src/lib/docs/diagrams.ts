@@ -108,8 +108,49 @@ export const authBoundariesDiagram = `flowchart TB
   ${OK_NODE}`;
 
 export const dataModelDiagram = `erDiagram
-  documents ||--o{ documentPages : "1 per page"
-  documents ||--o{ documentChunks : "many"
-  documents ||--o{ conversations : "many"
-  conversations ||--o{ messages : "many"
-  documentChunks ||..o{ messages : "cited by"`;
+  documents {
+    id _id PK
+    string ownerTokenIdentifier "auth scope"
+    string title
+    string status "lifecycle"
+    string sha256 "content hash"
+    id fileStorageId FK "_storage"
+    string documentSummary
+    number pageCount
+  }
+  documentPages {
+    id _id PK
+    id documentId FK
+    string ownerTokenIdentifier
+    number pageNumber
+    string extractedText "OCR"
+    string summary
+    vector embedding "1536-dim"
+  }
+  documentChunks {
+    id _id PK
+    id documentId FK
+    string ownerTokenIdentifier
+    number chunkIndex
+    string text "retrieval unit"
+    object pageSpans "citation offsets"
+    vector embedding "1536-dim"
+  }
+  conversations {
+    id _id PK
+    id documentId FK
+    string ownerTokenIdentifier
+    string title
+  }
+  messages {
+    id _id PK
+    id conversationId FK
+    string role "user or assistant"
+    string content
+    object citations "chunkId refs"
+  }
+  documents ||--o{ documentPages : "1 : N  pages"
+  documents ||--o{ documentChunks : "1 : N  chunks"
+  documents ||--o{ conversations : "1 : N  chats"
+  conversations ||--o{ messages : "1 : N  turns"
+  documentChunks |o..o{ messages : "cited by"`;

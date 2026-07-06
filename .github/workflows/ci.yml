@@ -20,11 +20,16 @@ jobs:
       NEXT_PUBLIC_CONVEX_SITE_URL: https://example.convex.site
       SITE_URL: http://localhost:3000
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
-      BETTER_AUTH_SECRET: ci-secret
-      GITHUB_CLIENT_ID: ci
-      GITHUB_CLIENT_SECRET: ci
-      GOOGLE_CLIENT_ID: ci
-      GOOGLE_CLIENT_SECRET: ci
+      # Build-only dummy Clerk credentials. The publishable key must be a
+      # well-formed pk_test_ value (base64 of "clerk.example.com$") so
+      # ClerkProvider parses during static prerender.
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_Y2xlcmsuZXhhbXBsZS5jb20k
+      CLERK_SECRET_KEY: sk_test_ci
+      CLERK_JWT_ISSUER_DOMAIN: https://clerk.example.com
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-in
+      NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /dashboard
+      NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /dashboard
 
     steps:
       - name: Checkout
