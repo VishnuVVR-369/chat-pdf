@@ -256,13 +256,6 @@ export function LandingPage() {
           animate="show"
           className="pt-16 pb-14 text-center sm:pt-24 sm:pb-18 md:pt-28 md:pb-22"
         >
-          <motion.div variants={fadeUp}>
-            <span className="inline-flex items-center gap-2.5 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-1.5 font-mono text-xs tracking-wide text-amber-400">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
-              AI-powered document intelligence
-            </span>
-          </motion.div>
-
           <motion.h1
             variants={fadeUp}
             className="mx-auto mt-6 max-w-4xl text-[2.6rem] leading-[1.06] font-bold tracking-[-0.035em] sm:text-5xl md:text-7xl md:leading-[1.02]"
