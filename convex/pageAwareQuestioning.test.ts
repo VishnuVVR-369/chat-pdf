@@ -23,10 +23,7 @@ type SeedOptions = {
   status?: "uploading" | "uploaded" | "processing" | "ready" | "failed";
 };
 
-async function seedDocument(
-  t: TestBackend,
-  options: SeedOptions = {},
-) {
+async function seedDocument(t: TestBackend, options: SeedOptions = {}) {
   const ownerTokenIdentifier = options.ownerTokenIdentifier ?? OWNER;
   const pageCount = options.pageCount ?? 3;
   const status = options.status ?? "ready";
@@ -102,64 +99,68 @@ function parseSse(text: string) {
 
 function mockOpenAi() {
   const requestBodies: Array<Record<string, unknown>> = [];
-  const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-    const body = JSON.parse(String(init?.body ?? "{}")) as Record<
-      string,
-      unknown
-    >;
-    requestBodies.push(body);
+  const fetchMock = vi.fn(
+    async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<
+        string,
+        unknown
+      >;
+      requestBodies.push(body);
 
-    if (Array.isArray(body.input)) {
-      throw new Error("Unexpected batch embedding request");
-    }
-    if (typeof body.input === "string") {
-      return Response.json({ data: [{ embedding: EMBEDDING }] });
-    }
+      if (Array.isArray(body.input)) {
+        throw new Error("Unexpected batch embedding request");
+      }
+      if (typeof body.input === "string") {
+        return Response.json({ data: [{ embedding: EMBEDDING }] });
+      }
 
-    const responseFormat = body.response_format as
-      | { json_schema?: { name?: string } }
-      | undefined;
-    const schemaName = responseFormat?.json_schema?.name;
-    const messages = body.messages;
-    const systemPrompt = Array.isArray(messages)
-      ? ((messages.find(
-          (message) =>
-            typeof message === "object" &&
-            message !== null &&
-            (message as { role?: unknown }).role === "system",
-        ) as { content?: unknown } | undefined)?.content ?? "")
-      : "";
-    const pageTwoSourceId =
-      typeof systemPrompt === "string"
-        ? systemPrompt.match(
-            /\[(S\d+)] page 2\nPage two contains beta-only evidence/,
-          )?.[1]
-        : undefined;
-    const structured =
-      schemaName === "chat_pdf_summary_answer"
-        ? {
-            answer: "Document-wide summary answer.",
-            citations: [{ sourceId: "P2" }],
-          }
-        : {
-            answer: "Evidence-grounded chunk answer.",
-            citations: [
-              {
-                sourceId: pageTwoSourceId ?? "S1",
-                quote:
-                  "Page two contains beta-only evidence for scoped retrieval.",
-              },
-            ],
-          };
-    const stream = [
-      `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(structured) } }] })}`,
-      "data: [DONE]",
-      "",
-    ].join("\n\n");
-    return new Response(stream, {
-      headers: { "Content-Type": "text/event-stream" },
-    });
-  });
+      const responseFormat = body.response_format as
+        | { json_schema?: { name?: string } }
+        | undefined;
+      const schemaName = responseFormat?.json_schema?.name;
+      const messages = body.messages;
+      const systemPrompt = Array.isArray(messages)
+        ? ((
+            messages.find(
+              (message) =>
+                typeof message === "object" &&
+                message !== null &&
+                (message as { role?: unknown }).role === "system",
+            ) as { content?: unknown } | undefined
+          )?.content ?? "")
+        : "";
+      const pageTwoSourceId =
+        typeof systemPrompt === "string"
+          ? systemPrompt.match(
+              /\[(S\d+)] page 2\nPage two contains beta-only evidence/,
+            )?.[1]
+          : undefined;
+      const structured =
+        schemaName === "chat_pdf_summary_answer"
+          ? {
+              answer: "Document-wide summary answer.",
+              citations: [{ sourceId: "P2" }],
+            }
+          : {
+              answer: "Evidence-grounded chunk answer.",
+              citations: [
+                {
+                  sourceId: pageTwoSourceId ?? "S1",
+                  quote:
+                    "Page two contains beta-only evidence for scoped retrieval.",
+                },
+              ],
+            };
+      const stream = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(structured) } }] })}`,
+        "data: [DONE]",
+        "",
+      ].join("\n\n");
+      return new Response(stream, {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    },
+  );
 
   vi.stubGlobal("fetch", fetchMock);
   return { fetchMock, requestBodies };
@@ -205,7 +206,9 @@ describe("page-aware questioning", () => {
           endPageNumber: 2,
           text,
           tokenCount: 5,
-          pageSpans: [{ pageNumber: 2, startOffset: 0, endOffset: text.length }],
+          pageSpans: [
+            { pageNumber: 2, startOffset: 0, endOffset: text.length },
+          ],
           embedding: EMBEDDING,
           embeddingModel: "test",
         });
@@ -254,15 +257,23 @@ describe("page-aware questioning", () => {
 
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.length).toBeLessThanOrEqual(24);
-    expect(chunks.every((chunk) => chunk.pageSpans.some((s) => s.pageNumber === 2))).toBe(true);
-    expect(chunks.every((chunk) => !chunk.text.includes("must not leak"))).toBe(true);
-    expect(chunks.every((chunk) => !chunk.text.includes("Another owner's"))).toBe(true);
+    expect(
+      chunks.every((chunk) => chunk.pageSpans.some((s) => s.pageNumber === 2)),
+    ).toBe(true);
+    expect(chunks.every((chunk) => !chunk.text.includes("must not leak"))).toBe(
+      true,
+    );
+    expect(
+      chunks.every((chunk) => !chunk.text.includes("Another owner's")),
+    ).toBe(true);
   });
 
   test("rejects unauthenticated, unowned, unready, and out-of-range scoped requests", async () => {
     const t = createTestBackend();
     const readyDocumentId = await seedReadyDocumentWithEvidence(t);
-    const processingDocumentId = await seedDocument(t, { status: "processing" });
+    const processingDocumentId = await seedDocument(t, {
+      status: "processing",
+    });
 
     const request = (documentId: Id<"documents">, pageNumber: number) => ({
       method: "POST",
@@ -367,15 +378,17 @@ describe("page-aware questioning", () => {
       "Page two contains beta-only evidence for scoped retrieval.",
     );
     expect(regeneratedPrompt).not.toContain("Page one contains alpha evidence");
-    expect(regeneratedPrompt).not.toContain("Page three contains gamma evidence");
+    expect(regeneratedPrompt).not.toContain(
+      "Page three contains gamma evidence",
+    );
 
     const regeneratedMessages = await authed.query(
       api.chatData.getConversationMessages,
       { conversationId },
     );
-    expect(regeneratedMessages.filter((message) => message.role === "user")).toEqual([
-      expect.objectContaining({ pageNumber: 2 }),
-    ]);
+    expect(
+      regeneratedMessages.filter((message) => message.role === "user"),
+    ).toEqual([expect.objectContaining({ pageNumber: 2 })]);
   });
 
   test("keeps document-wide summaries as the default when no page scope is sent", async () => {

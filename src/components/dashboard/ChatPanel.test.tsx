@@ -4,7 +4,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import postcss from "postcss";
 import tailwindcss from "@tailwindcss/postcss";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -80,15 +86,23 @@ vi.mock("motion/react", async () => {
   const motion = new Proxy(
     {},
     {
-      get: (_target, tag: string) =>
-        React.forwardRef<HTMLElement, Record<string, unknown>>(
-          ({ children, ...props }, ref) => {
-            const safeProps = Object.fromEntries(
-              Object.entries(props).filter(([name]) => !ignoredProps.has(name)),
-            );
-            return React.createElement(tag, { ...safeProps, ref }, children);
-          },
-        ),
+      get: (_target, tag: string) => {
+        const MotionComponent = React.forwardRef<
+          HTMLElement,
+          Record<string, unknown> & { children?: React.ReactNode }
+        >(({ children, ...props }, ref) => {
+          const safeProps = Object.fromEntries(
+            Object.entries(props).filter(([name]) => !ignoredProps.has(name)),
+          );
+          return React.createElement(
+            tag,
+            { ...safeProps, ref },
+            children as React.ReactNode,
+          );
+        });
+        MotionComponent.displayName = `Motion.${tag}`;
+        return MotionComponent;
+      },
     },
   );
 
@@ -134,29 +148,31 @@ describe("ChatPanel page scope UI", () => {
 
   test("sends the visible current page only after the user selects page scope", async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      requestBodies.push(
-        JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
-      );
-      const stream = [
-        `data: ${JSON.stringify({
-          type: "meta",
-          conversationId: "conversation-page-scope",
-          assistantMessageId: "assistant-new",
-          isNew: false,
-        })}`,
-        `data: ${JSON.stringify({ type: "token", token: "Scoped answer" })}`,
-        `data: ${JSON.stringify({
-          type: "done",
-          content: "Scoped answer",
-          citations: [],
-        })}`,
-        "",
-      ].join("\n\n");
-      return new Response(stream, {
-        headers: { "Content-Type": "text/event-stream" },
-      });
-    });
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBodies.push(
+          JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>,
+        );
+        const stream = [
+          `data: ${JSON.stringify({
+            type: "meta",
+            conversationId: "conversation-page-scope",
+            assistantMessageId: "assistant-new",
+            isNew: false,
+          })}`,
+          `data: ${JSON.stringify({ type: "token", token: "Scoped answer" })}`,
+          `data: ${JSON.stringify({
+            type: "done",
+            content: "Scoped answer",
+            citations: [],
+          })}`,
+          "",
+        ].join("\n\n");
+        return new Response(stream, {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      },
+    );
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
 
@@ -183,7 +199,9 @@ describe("ChatPanel page scope UI", () => {
     const documentScope = within(scopeGroup).getByRole("button", {
       name: "Document",
     });
-    const pageScope = within(scopeGroup).getByRole("button", { name: "Page 2" });
+    const pageScope = within(scopeGroup).getByRole("button", {
+      name: "Page 2",
+    });
     expect(documentScope.getAttribute("aria-pressed")).toBe("true");
     expect(pageScope.getAttribute("aria-pressed")).toBe("false");
 
@@ -225,8 +243,12 @@ describe("ChatPanel page scope UI", () => {
     );
 
     expect(markup).toContain('aria-label="Question scope"');
-    expect(markup).toMatch(/<button aria-pressed="true"[^>]*>Document<\/button>/);
-    expect(markup).toMatch(/<button aria-pressed="false"[^>]*>Page 2<\/button>/);
+    expect(markup).toMatch(
+      /<button aria-pressed="true"[^>]*>Document<\/button>/,
+    );
+    expect(markup).toMatch(
+      /<button aria-pressed="false"[^>]*>Page 2<\/button>/,
+    );
     expect(markup).toContain("Explain the beta evidence on this page");
     expect(markup.match(/Page 2/g)).toHaveLength(2);
 
