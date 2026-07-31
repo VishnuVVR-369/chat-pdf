@@ -5,6 +5,7 @@ import {
   modelSupportsTemperature,
   resolveRoutingReasoningEffort,
 } from "./modelCapabilities";
+import { MAX_ROUTING_COMPLETION_TOKENS } from "../src/constants/chat";
 
 /* ─── Constants ─────────────────────────────────────────────────── */
 
@@ -847,6 +848,7 @@ async function fetchRoutingDecision(
       ...(routingReasoningEffort
         ? { reasoning_effort: routingReasoningEffort }
         : {}),
+      max_completion_tokens: MAX_ROUTING_COMPLETION_TOKENS,
       response_format: routingDecisionFormat,
       messages: [
         {

@@ -1,1 +1,3 @@
 export const MAX_PDF_PAGES = 100;
+export const MAX_PDF_FILE_SIZE_MIB = 25;
+export const MAX_PDF_FILE_SIZE_BYTES = MAX_PDF_FILE_SIZE_MIB * 1024 * 1024;

@@ -19,6 +19,7 @@ import type * as documents from "../documents.js";
 import type * as http from "../http.js";
 import type * as modelCapabilities from "../modelCapabilities.js";
 import type * as openAi from "../openAi.js";
+import type * as storageData from "../storageData.js";
 
 import type {
   ApiFromModules,
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   modelCapabilities: typeof modelCapabilities;
   openAi: typeof openAi;
+  storageData: typeof storageData;
 }>;
 
 /**

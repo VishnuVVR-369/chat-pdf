@@ -12,6 +12,7 @@ import type { ActionCtx } from "./_generated/server";
 import { internalAction } from "./_generated/server";
 import { createOpenAiEmbeddingClient, loadOpenAiChatConfig } from "./openAi";
 import { modelSupportsTemperature } from "./modelCapabilities";
+import { MAX_SUMMARY_COMPLETION_TOKENS } from "../src/constants/chat";
 
 const MAX_PROCESSING_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [15_000, 60_000];
@@ -224,6 +225,7 @@ async function fetchStructuredChatCompletion(
       model: chatModel,
       messages,
       ...(modelSupportsTemperature(chatModel) ? { temperature } : {}),
+      max_completion_tokens: MAX_SUMMARY_COMPLETION_TOKENS,
       response_format: responseFormat,
     }),
   });

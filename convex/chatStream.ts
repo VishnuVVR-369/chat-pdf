@@ -21,6 +21,11 @@ import {
   summaryAnswerFormat,
   structuredAnswerFormat,
 } from "./chatHelpers";
+import {
+  MAX_CHAT_COMPLETION_TOKENS,
+  MAX_CHAT_QUESTION_CHARACTERS,
+  MAX_CHAT_REQUEST_BYTES,
+} from "../src/constants/chat";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -77,6 +82,7 @@ async function streamStructuredAnswer(args: {
         ? { temperature: args.temperature }
         : {}),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      max_completion_tokens: MAX_CHAT_COMPLETION_TOKENS,
       response_format: args.responseFormat,
       stream: true,
     }),
@@ -143,15 +149,37 @@ export const streamChat = httpAction(async (ctx, req) => {
   }
   const ownerTokenIdentifier = identity.tokenIdentifier;
 
-  let body: {
+  type ChatRequestBody = {
     documentId: string;
     conversationId?: string;
     content?: string;
     regenerate?: boolean;
     expectedAssistantMessageId?: string;
   };
+
+  const declaredLength = Number(req.headers.get("content-length"));
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > MAX_CHAT_REQUEST_BYTES
+  ) {
+    return jsonError(413, "Request body is too large");
+  }
+
+  let body: ChatRequestBody;
   try {
-    body = (await req.json()) as typeof body;
+    const rawBody = await req.text();
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_CHAT_REQUEST_BYTES) {
+      return jsonError(413, "Request body is too large");
+    }
+    const parsedBody: unknown = JSON.parse(rawBody);
+    if (
+      typeof parsedBody !== "object" ||
+      parsedBody === null ||
+      Array.isArray(parsedBody)
+    ) {
+      return jsonError(400, "Invalid JSON body");
+    }
+    body = parsedBody as ChatRequestBody;
   } catch {
     return jsonError(400, "Invalid JSON body");
   }
@@ -166,18 +194,33 @@ export const streamChat = httpAction(async (ctx, req) => {
 
   const isRegenerate = regenerate === true;
 
-  if (!documentId) {
+  if (typeof documentId !== "string" || !documentId) {
     return jsonError(400, "Missing documentId");
   }
+  if (
+    rawConversationId !== undefined &&
+    typeof rawConversationId !== "string"
+  ) {
+    return jsonError(400, "Invalid conversationId");
+  }
   if (isRegenerate) {
-    if (!rawConversationId || !expectedAssistantMessageId) {
+    if (
+      !rawConversationId ||
+      typeof expectedAssistantMessageId !== "string" ||
+      !expectedAssistantMessageId
+    ) {
       return jsonError(
         400,
         "Regeneration requires conversationId and expectedAssistantMessageId",
       );
     }
-  } else if (!content) {
+  } else if (typeof content !== "string" || !content.trim()) {
     return jsonError(400, "Missing content");
+  } else if (content.length > MAX_CHAT_QUESTION_CHARACTERS) {
+    return jsonError(
+      413,
+      `Questions must be ${MAX_CHAT_QUESTION_CHARACTERS} characters or fewer`,
+    );
   }
 
   const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
@@ -226,7 +269,7 @@ export const streamChat = httpAction(async (ctx, req) => {
     assistantMessageId = claim.assistantMessageId;
     queryContent = claim.userContent;
   } else {
-    queryContent = content as string;
+    queryContent = (content as string).trim();
 
     if (rawConversationId) {
       const conversation = await ctx.runQuery(

@@ -1,4 +1,8 @@
-import { MAX_PDF_PAGES } from "@/constants/pdf";
+import {
+  MAX_PDF_FILE_SIZE_BYTES,
+  MAX_PDF_FILE_SIZE_MIB,
+  MAX_PDF_PAGES,
+} from "@/constants/pdf";
 
 export type PdfPreflightResult =
   | {
@@ -33,6 +37,20 @@ async function readPdfPageCount(bytes: Uint8Array) {
 }
 
 export async function inspectPdfFile(file: File): Promise<PdfPreflightResult> {
+  if (file.size === 0) {
+    return {
+      status: "rejected",
+      message: "Uploaded PDF is empty.",
+    };
+  }
+
+  if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
+    return {
+      status: "rejected",
+      message: `PDFs must be ${MAX_PDF_FILE_SIZE_MIB} MiB or smaller.`,
+    };
+  }
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const signature = new TextDecoder("utf-8").decode(bytes.subarray(0, 5));
 

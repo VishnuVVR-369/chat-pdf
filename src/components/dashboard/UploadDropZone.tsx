@@ -3,7 +3,7 @@
 import type { ChangeEvent, DragEvent } from "react";
 import { useCallback, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { MAX_PDF_PAGES } from "@/constants/pdf";
+import { MAX_PDF_FILE_SIZE_MIB, MAX_PDF_PAGES } from "@/constants/pdf";
 
 type UploadDropZoneProps = {
   onFileSelect: (file: File) => void;
@@ -95,7 +95,7 @@ export function UploadDropZone({ onFileSelect }: UploadDropZoneProps) {
         </p>
 
         <p className="mt-4 text-xs text-stone-600">
-          PDF files up to {MAX_PDF_PAGES} pages
+          PDF files up to {MAX_PDF_PAGES} pages and {MAX_PDF_FILE_SIZE_MIB} MiB
         </p>
       </button>
     </div>
