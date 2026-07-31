@@ -17,6 +17,8 @@ const messageStatusValidator = v.union(
   v.literal("failed"),
 );
 const MESSAGE_DELETE_BATCH = 256;
+const EMPTY_DOCUMENT_CHUNK_TEXT =
+  "[No extractable text found in this PDF.]";
 const citationValidator = v.object({
   pageNumber: v.number(),
   snippet: v.string(),
@@ -633,11 +635,26 @@ export const getDocumentChunksForPage = internalQuery({
       .take(24);
 
     return candidates
-      .filter(
-        (chunk) =>
-          chunk.ownerTokenIdentifier === args.ownerTokenIdentifier &&
-          chunk.endPageNumber >= args.pageNumber,
-      )
+      .filter((chunk) => {
+        if (chunk.ownerTokenIdentifier !== args.ownerTokenIdentifier) {
+          return false;
+        }
+
+        const hasMatchingPageSpan = chunk.pageSpans.some(
+          (span) => span.pageNumber === args.pageNumber,
+        );
+        const onlySpan = chunk.pageSpans[0];
+        const isAllEmptyDocumentPlaceholder =
+          chunk.text === EMPTY_DOCUMENT_CHUNK_TEXT &&
+          chunk.pageSpans.length === 1 &&
+          onlySpan?.pageNumber === chunk.startPageNumber &&
+          onlySpan.startOffset === 0 &&
+          onlySpan.endOffset === chunk.text.length &&
+          chunk.startPageNumber <= args.pageNumber &&
+          chunk.endPageNumber >= args.pageNumber;
+
+        return hasMatchingPageSpan || isAllEmptyDocumentPlaceholder;
+      })
       .sort((a, b) => a.chunkIndex - b.chunkIndex)
       .map((chunk) => ({
         _id: chunk._id,

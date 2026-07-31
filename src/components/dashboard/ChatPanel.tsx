@@ -869,6 +869,13 @@ function ChatBody({
   const handleRegenerate = useCallback(
     (assistantMessageId: Id<"messages">) => {
       if (isGenerating) return;
+      const assistantIndex = messages?.findIndex(
+        (message) => message._id === assistantMessageId,
+      );
+      const userMessage =
+        assistantIndex !== undefined && assistantIndex > 0
+          ? messages?.[assistantIndex - 1]
+          : undefined;
       captureEvent("chat_regenerate_requested", {
         assistant_message_id: assistantMessageId,
         conversation_id: conversationId ?? undefined,
@@ -877,9 +884,17 @@ function ChatBody({
       void runGeneration({
         regenerate: true,
         expectedAssistantMessageId: assistantMessageId,
+        ...(userMessage?.role === "user"
+          ? {
+              userContent: userMessage.content,
+              ...(userMessage.pageNumber !== undefined
+                ? { pageNumber: userMessage.pageNumber }
+                : {}),
+            }
+          : {}),
       });
     },
-    [conversationId, document._id, isGenerating, runGeneration],
+    [conversationId, document._id, isGenerating, messages, runGeneration],
   );
 
   const handleSuggestedPrompt = useCallback(
