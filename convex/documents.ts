@@ -756,6 +756,7 @@ export const getOwnedDocument = internalQuery({
       status: documentStatusValidator,
       title: v.string(),
       documentSummary: v.string(),
+      pageCount: v.optional(v.number()),
       originalFilename: v.string(),
       fileStorageId: v.optional(v.id("_storage")),
       ocrResultStorageId: v.optional(v.id("_storage")),
@@ -778,6 +779,9 @@ export const getOwnedDocument = internalQuery({
       status: document.status,
       title: document.title,
       documentSummary: document.documentSummary,
+      ...(document.pageCount !== undefined
+        ? { pageCount: document.pageCount }
+        : {}),
       originalFilename: document.originalFilename,
       ...(document.fileStorageId !== undefined
         ? { fileStorageId: document.fileStorageId }

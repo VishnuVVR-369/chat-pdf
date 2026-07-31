@@ -62,6 +62,7 @@ type ConversationMessage = {
   _id: Id<"messages">;
   role: "user" | "assistant";
   content: string;
+  pageNumber?: number;
   status?: MessageStatus;
   citations?: Citation[];
   createdAt: number;
@@ -74,6 +75,7 @@ type PendingExchange = {
   conversationId: Id<"conversations"> | null;
   isRegenerate: boolean;
   isStreaming: boolean;
+  pageNumber?: number;
   submittedAt: number;
   userContent: string;
 };
@@ -85,6 +87,7 @@ type ChatMessageItem = {
   id?: Id<"messages">;
   key: string;
   pending?: boolean;
+  pageNumber?: number;
   role: "user" | "assistant";
   status?: MessageStatus;
   streaming?: boolean;
@@ -551,6 +554,9 @@ function ChatBody({
   const abortRef = useRef<AbortController | null>(null);
   const pendingRef = useRef<PendingExchange | null>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const [questionScope, setQuestionScope] = useState<"document" | "page">(
+    "document",
+  );
 
   // Mirror pending state into a ref so stop can read the latest partial synchronously.
   useEffect(() => {
@@ -606,11 +612,13 @@ function ChatBody({
       regenerate?: boolean;
       expectedAssistantMessageId?: Id<"messages">;
       userContent?: string;
+      pageNumber?: number;
     }) => {
       if (isGenerating) return;
 
       const isRegenerate = params.regenerate === true;
       const userContent = params.userContent ?? "";
+      const pageNumber = params.pageNumber;
 
       setError(null);
       setIsGenerating(true);
@@ -625,6 +633,8 @@ function ChatBody({
         document_id: document._id,
         is_regenerate: isRegenerate,
         question_length: userContent.length,
+        question_scope: pageNumber === undefined ? "document" : "page",
+        scoped_page: pageNumber,
         status: document.status,
       });
 
@@ -635,6 +645,7 @@ function ChatBody({
         conversationId,
         isRegenerate,
         isStreaming: true,
+        ...(pageNumber !== undefined ? { pageNumber } : {}),
         submittedAt,
         userContent,
       });
@@ -662,6 +673,7 @@ function ChatBody({
               documentId: document._id,
               conversationId: conversationId ?? undefined,
               content: userContent,
+              ...(pageNumber !== undefined ? { pageNumber } : {}),
             };
 
         const res = await fetch(`${siteUrl}/api/chat/stream`, {
@@ -753,6 +765,8 @@ function ChatBody({
                 ),
                 is_regenerate: isRegenerate,
                 question_length: userContent.length,
+                question_scope: pageNumber === undefined ? "document" : "page",
+                scoped_page: pageNumber,
                 time_to_first_token_ms:
                   firstTokenAt !== null
                     ? Math.round(firstTokenAt - generationStartedAt)
@@ -814,7 +828,12 @@ function ChatBody({
     const question = input.trim();
     if (!question || isGenerating) return;
     setInput("");
-    await runGeneration({ userContent: question });
+    await runGeneration({
+      userContent: question,
+      ...(questionScope === "page" && currentPage !== undefined
+        ? { pageNumber: currentPage }
+        : {}),
+    });
   };
 
   const handleStop = useCallback(async () => {
@@ -866,6 +885,7 @@ function ChatBody({
   const handleSuggestedPrompt = useCallback(
     (prompt: (typeof SUGGESTED_PROMPTS)[number]) => {
       const text = prompt.build(currentPage);
+      setQuestionScope(prompt.id === "page" ? "page" : "document");
       captureEvent("suggested_prompt_selected", {
         current_page: currentPage,
         document_id: document._id,
@@ -888,6 +908,7 @@ function ChatBody({
       createdAt: message.createdAt,
       id: message._id,
       key: message._id,
+      pageNumber: message.pageNumber,
       role: message.role,
       status: message.status,
     }),
@@ -909,6 +930,7 @@ function ChatBody({
         createdAt: pendingExchange.submittedAt,
         key: `pending-user-${pendingExchange.submittedAt}`,
         pending: true,
+        pageNumber: pendingExchange.pageNumber,
         role: "user",
       });
     }
@@ -1053,13 +1075,42 @@ function ChatBody({
           )}
           onSubmit={handleSubmit}
         >
-          {currentPage && (
-            <div className="flex px-4 pt-3 pb-0">
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-500/[0.08] px-2 py-0.5 text-xs font-medium text-amber-400/80">
-                Page {currentPage}
-              </span>
+          <div className="flex px-4 pt-3 pb-0">
+            <div
+              aria-label="Question scope"
+              className="inline-flex rounded-lg border border-white/[0.07] bg-black/20 p-0.5"
+              role="group"
+            >
+              <button
+                aria-pressed={questionScope === "document"}
+                className={cn(
+                  "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
+                  questionScope === "document"
+                    ? "bg-white/[0.08] text-stone-200"
+                    : "text-stone-500 hover:text-stone-300",
+                )}
+                onClick={() => setQuestionScope("document")}
+                type="button"
+              >
+                Document
+              </button>
+              {currentPage !== undefined && (
+                <button
+                  aria-pressed={questionScope === "page"}
+                  className={cn(
+                    "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
+                    questionScope === "page"
+                      ? "bg-amber-500/[0.12] text-amber-300"
+                      : "text-stone-500 hover:text-stone-300",
+                  )}
+                  onClick={() => setQuestionScope("page")}
+                  type="button"
+                >
+                  Page {currentPage}
+                </button>
+              )}
             </div>
-          )}
+          </div>
 
           <div className="flex items-end gap-2 px-4 py-3">
             <textarea
@@ -1210,6 +1261,11 @@ function ChatMessageBubble({
           )}
         >
           <span className="font-medium">{isUser ? "You" : "Assistant"}</span>
+          {isUser && message.pageNumber !== undefined && (
+            <span className="rounded bg-amber-500/[0.08] px-1.5 py-0.5 text-amber-400/70">
+              Page {message.pageNumber}
+            </span>
+          )}
           <span className="text-stone-600">
             {messageTimeFormatter.format(message.createdAt)}
           </span>

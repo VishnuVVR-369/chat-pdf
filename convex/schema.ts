@@ -97,6 +97,10 @@ export default defineSchema({
       "documentId",
     ])
     .index("by_documentId_and_chunkIndex", ["documentId", "chunkIndex"])
+    .index("by_documentId_and_startPageNumber", [
+      "documentId",
+      "startPageNumber",
+    ])
     .searchIndex("search_text", {
       searchField: "text",
       filterFields: ["ownerDocumentKey"],
@@ -119,6 +123,7 @@ export default defineSchema({
     conversationId: v.id("conversations"),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
+    pageNumber: v.optional(v.number()),
     status: v.optional(
       v.union(
         v.literal("streaming"),
