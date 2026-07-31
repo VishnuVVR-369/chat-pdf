@@ -195,6 +195,25 @@ export const usingChatPdfGroup: DocsGroup = {
         "Get useful answers by asking questions that match the evidence available in your PDFs.",
       sections: [
         {
+          id: "question-scope",
+          title: "Choose a question scope",
+          body: (
+            <>
+              <p>
+                The composer defaults to <strong>Document</strong>, so questions
+                can use evidence from the whole PDF. Choose the current-page
+                button when the answer must stay within the page visible in the
+                PDF viewer; the page is captured when you send the question.
+              </p>
+              <Callout type="note" title="Scope stays with the question">
+                Current-page questions show a page badge in chat history.
+                Regenerating an answer reuses that saved page even if you have
+                since moved the PDF viewer to another page.
+              </Callout>
+            </>
+          ),
+        },
+        {
           id: "question-style",
           title: "Question style",
           body: (
@@ -247,8 +266,9 @@ export const usingChatPdfGroup: DocsGroup = {
             <>
               <p>
                 Before retrieval, a lightweight router rewrites your question
-                into a standalone query and picks one of two modes. You never
-                choose this manually — it is inferred from the question.
+                into a standalone query and picks one of two modes. These modes
+                are inferred from the question; they are separate from the
+                Document and current-page scope controls in the composer.
               </p>
               <InfoGrid
                 items={[
@@ -256,7 +276,7 @@ export const usingChatPdfGroup: DocsGroup = {
                     title: "Chunks mode",
                     icon: QuoteDownIcon,
                     description:
-                      "Precise, evidence-seeking questions. Uses hybrid retrieval over chunks and returns verbatim quotes.",
+                      "Precise, document-scoped questions use hybrid retrieval over chunks. Current-page questions instead use only chunks overlapping that page.",
                   },
                   {
                     title: "Summaries mode",

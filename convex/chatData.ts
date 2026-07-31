@@ -17,8 +17,7 @@ const messageStatusValidator = v.union(
   v.literal("failed"),
 );
 const MESSAGE_DELETE_BATCH = 256;
-const EMPTY_DOCUMENT_CHUNK_TEXT =
-  "[No extractable text found in this PDF.]";
+const EMPTY_DOCUMENT_CHUNK_TEXT = "[No extractable text found in this PDF.]";
 const citationValidator = v.object({
   pageNumber: v.number(),
   snippet: v.string(),

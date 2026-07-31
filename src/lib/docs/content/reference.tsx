@@ -96,7 +96,7 @@ const schemaTables: SchemaTable[] = [
         badges: ["owner", "index"],
       },
       { name: "chunkIndex", type: "number", badges: ["index"] },
-      { name: "startPageNumber", type: "number" },
+      { name: "startPageNumber", type: "number", badges: ["index"] },
       { name: "endPageNumber", type: "number" },
       { name: "text", type: "string", badges: ["search"] },
       { name: "tokenCount", type: "number" },
@@ -138,6 +138,7 @@ const schemaTables: SchemaTable[] = [
       },
       { name: "role", type: "union" },
       { name: "content", type: "string" },
+      { name: "pageNumber", type: "number", optional: true },
       { name: "status", type: "union", optional: true },
       {
         name: "citations",
@@ -251,11 +252,13 @@ export const referenceGroup: DocsGroup = {
                 <code>by_embedding</code> (1536-dim, filtered by{" "}
                 <code>documentId</code>) and a full-text{" "}
                 <code>search_text</code> index. Hybrid retrieval queries both
-                and fuses the results; <code>documentPages</code> keeps its own
-                vector index for page-level search.
+                and fuses the results. The composite{" "}
+                <code>by_documentId_and_startPageNumber</code> index supports
+                bounded current-page chunk retrieval; <code>documentPages</code>{" "}
+                keeps its own vector index for page-level search.
               </Callout>
               <p className="mt-5">
-                Two composite fields do the heavy lifting for grounded answers:
+                Three fields do the heavy lifting for grounded answers:
               </p>
               <FieldTable
                 rows={[
@@ -270,6 +273,12 @@ export const referenceGroup: DocsGroup = {
                     type: "object[]?",
                     description:
                       "Validated citations: pageNumber, snippet, chunkId (→ documentChunks), verbatim quote, and its character offsets.",
+                  },
+                  {
+                    name: "messages.pageNumber",
+                    type: "number?",
+                    description:
+                      "The explicit page scope on a user turn. It is displayed in history and reused when the following answer is regenerated.",
                   },
                 ]}
               />
