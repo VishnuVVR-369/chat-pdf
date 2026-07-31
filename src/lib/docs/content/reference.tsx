@@ -5,6 +5,7 @@ import {
   Layers01Icon,
   QuoteDownIcon,
 } from "@hugeicons/core-free-icons";
+import Link from "next/link";
 
 import {
   Accordion,
@@ -559,7 +560,13 @@ export const referenceGroup: DocsGroup = {
                       items={[
                         "Verify MISTRAL_API_KEY is valid — OCR is the first step after upload.",
                         "Confirm MISTRAL_OCR_MODEL is set (default: mistral-ocr-4-0).",
-                        "Confirm the document is 100 pages or fewer — larger files are rejected before OCR starts.",
+                        <>
+                          Confirm the document meets the current limits in{" "}
+                          <Link href="/docs/using-chatpdf/uploading-pdfs#supported-files">
+                            Supported files
+                          </Link>
+                          .
+                        </>,
                         "Check OpenAI credentials if embedding or summary steps fail after OCR succeeds.",
                         "Inspect Convex logs for the exact failing step and retry count.",
                       ]}
