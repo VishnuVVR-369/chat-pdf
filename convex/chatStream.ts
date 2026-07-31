@@ -48,6 +48,34 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
+async function readLimitedRequestBody(
+  req: Request,
+  maxBytes: number,
+): Promise<string | null> {
+  if (!req.body) return "";
+
+  const reader = req.body.getReader();
+  const decoder = new TextDecoder();
+  let body = "";
+  let bytesRead = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return body + decoder.decode();
+
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function getChatConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
@@ -97,6 +125,7 @@ async function streamStructuredAnswer(args: {
   const decoder = new TextDecoder();
   let sseBuffer = "";
   let aborted = false;
+  let finishReason: string | null = null;
 
   try {
     while (true) {
@@ -111,13 +140,20 @@ async function streamStructuredAnswer(args: {
         if (!line.startsWith("data: ")) continue;
         const raw = line.slice("data: ".length).trim();
         if (raw === "[DONE]") break;
-        let parsed: { choices?: Array<{ delta?: { content?: string } }> };
+        let parsed: {
+          choices?: Array<{
+            delta?: { content?: string };
+            finish_reason?: string | null;
+          }>;
+        };
         try {
           parsed = JSON.parse(raw) as typeof parsed;
         } catch {
           continue;
         }
-        const delta = parsed.choices?.[0]?.delta?.content ?? "";
+        const choice = parsed.choices?.[0];
+        if (choice?.finish_reason) finishReason = choice.finish_reason;
+        const delta = choice?.delta?.content ?? "";
         if (!delta) continue;
         const decoded = extractor.feed(delta);
         if (decoded) {
@@ -129,6 +165,10 @@ async function streamStructuredAnswer(args: {
     // A client-driven stop aborts the fetch; surface partial output rather than throw.
     if (!isAbortError(err)) throw err;
     aborted = true;
+  }
+
+  if (!aborted && finishReason === "length") {
+    throw new Error("OpenAI completion reached its token limit");
   }
 
   return {
@@ -167,8 +207,8 @@ export const streamChat = httpAction(async (ctx, req) => {
 
   let body: ChatRequestBody;
   try {
-    const rawBody = await req.text();
-    if (new TextEncoder().encode(rawBody).byteLength > MAX_CHAT_REQUEST_BYTES) {
+    const rawBody = await readLimitedRequestBody(req, MAX_CHAT_REQUEST_BYTES);
+    if (rawBody === null) {
       return jsonError(413, "Request body is too large");
     }
     const parsedBody: unknown = JSON.parse(rawBody);
