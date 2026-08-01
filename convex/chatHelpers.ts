@@ -985,9 +985,27 @@ export async function getChunkRetrievalContext(
     documentId: Id<"documents">;
     ownerTokenIdentifier: string;
     query: string;
+    pageNumber?: number;
     signal?: AbortSignal;
   },
 ) {
+  if (args.pageNumber !== undefined) {
+    const pageChunks = await ctx.runQuery(
+      internal.chatData.getDocumentChunksForPage,
+      {
+        documentId: args.documentId,
+        ownerTokenIdentifier: args.ownerTokenIdentifier,
+        pageNumber: args.pageNumber,
+      },
+    );
+
+    return pageChunks.map((chunk, index) => ({
+      ...chunk,
+      hybridScore: 1,
+      sourceId: `S${index + 1}`,
+    }));
+  }
+
   const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
   const lexicalSearchPromise = ctx.runQuery(
     internal.chatData.searchDocumentChunks,

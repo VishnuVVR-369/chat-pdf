@@ -17,6 +17,7 @@ const messageStatusValidator = v.union(
   v.literal("failed"),
 );
 const MESSAGE_DELETE_BATCH = 256;
+const EMPTY_DOCUMENT_CHUNK_TEXT = "[No extractable text found in this PDF.]";
 const citationValidator = v.object({
   pageNumber: v.number(),
   snippet: v.string(),
@@ -117,6 +118,7 @@ export const addMessage = internalMutation({
     conversationId: v.id("conversations"),
     role: messageRoleValidator,
     content: v.string(),
+    pageNumber: v.optional(v.number()),
     status: v.optional(messageStatusValidator),
     citations: v.optional(v.array(citationValidator)),
   },
@@ -132,6 +134,7 @@ export const addMessage = internalMutation({
       conversationId: args.conversationId,
       role: args.role,
       content: args.content,
+      ...(args.pageNumber !== undefined ? { pageNumber: args.pageNumber } : {}),
       ...(args.status !== undefined ? { status: args.status } : {}),
       ...(args.citations !== undefined ? { citations: args.citations } : {}),
       createdAt: Date.now(),
@@ -219,6 +222,7 @@ export const startRegeneration = internalMutation({
   returns: v.union(
     v.object({
       userContent: v.string(),
+      pageNumber: v.optional(v.number()),
       assistantMessageId: v.id("messages"),
     }),
     v.null(),
@@ -264,7 +268,11 @@ export const startRegeneration = internalMutation({
       createdAt: Date.now(),
     });
 
-    return { userContent: user.content, assistantMessageId };
+    return {
+      userContent: user.content,
+      ...(user.pageNumber !== undefined ? { pageNumber: user.pageNumber } : {}),
+      assistantMessageId,
+    };
   },
 });
 
@@ -591,6 +599,74 @@ export const getDocumentChunksByIndexes = internalQuery({
   },
 });
 
+export const getDocumentChunksForPage = internalQuery({
+  args: {
+    documentId: v.id("documents"),
+    ownerTokenIdentifier: v.string(),
+    pageNumber: v.number(),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.id("documentChunks"),
+      chunkIndex: v.number(),
+      startPageNumber: v.number(),
+      endPageNumber: v.number(),
+      text: v.string(),
+      tokenCount: v.number(),
+      pageSpans: v.array(
+        v.object({
+          pageNumber: v.number(),
+          startOffset: v.number(),
+          endOffset: v.number(),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const candidates = await ctx.db
+      .query("documentChunks")
+      .withIndex("by_documentId_and_startPageNumber", (q) =>
+        q
+          .eq("documentId", args.documentId)
+          .lte("startPageNumber", args.pageNumber),
+      )
+      .order("desc")
+      .take(24);
+
+    return candidates
+      .filter((chunk) => {
+        if (chunk.ownerTokenIdentifier !== args.ownerTokenIdentifier) {
+          return false;
+        }
+
+        const hasMatchingPageSpan = chunk.pageSpans.some(
+          (span) => span.pageNumber === args.pageNumber,
+        );
+        const onlySpan = chunk.pageSpans[0];
+        const isAllEmptyDocumentPlaceholder =
+          chunk.text === EMPTY_DOCUMENT_CHUNK_TEXT &&
+          chunk.pageSpans.length === 1 &&
+          onlySpan?.pageNumber === chunk.startPageNumber &&
+          onlySpan.startOffset === 0 &&
+          onlySpan.endOffset === chunk.text.length &&
+          chunk.startPageNumber <= args.pageNumber &&
+          chunk.endPageNumber >= args.pageNumber;
+
+        return hasMatchingPageSpan || isAllEmptyDocumentPlaceholder;
+      })
+      .sort((a, b) => a.chunkIndex - b.chunkIndex)
+      .map((chunk) => ({
+        _id: chunk._id,
+        chunkIndex: chunk.chunkIndex,
+        startPageNumber: chunk.startPageNumber,
+        endPageNumber: chunk.endPageNumber,
+        text: chunk.text,
+        tokenCount: chunk.tokenCount,
+        pageSpans: chunk.pageSpans,
+      }));
+  },
+});
+
 export const listConversationsForDocument = query({
   args: {
     documentId: v.id("documents"),
@@ -631,6 +707,7 @@ export const getConversationMessages = query({
       _id: v.id("messages"),
       role: messageRoleValidator,
       content: v.string(),
+      pageNumber: v.optional(v.number()),
       status: v.optional(messageStatusValidator),
       citations: v.optional(v.array(citationValidator)),
       createdAt: v.number(),
@@ -662,6 +739,9 @@ export const getConversationMessages = query({
         _id: message._id,
         role: message.role,
         content: message.content,
+        ...(message.pageNumber !== undefined
+          ? { pageNumber: message.pageNumber }
+          : {}),
         ...(message.status !== undefined ? { status: message.status } : {}),
         ...(message.citations !== undefined
           ? { citations: message.citations }

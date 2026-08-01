@@ -162,12 +162,14 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                At query time the pipeline routes the question, retrieves
-                evidence with hybrid search, fuses the rankings, and streams a
-                cited answer. Each stage is shown below.
+                At query time the pipeline rewrites the question and applies its
+                scope. Document-scoped questions route to summaries or hybrid
+                search; current-page questions load only overlapping page
+                chunks. The selected evidence then feeds a streamed, cited
+                answer.
               </p>
               <Diagram
-                caption="The retrieval pipeline. A router picks chunks or summaries; hybrid search and rank fusion select the final evidence."
+                caption="The retrieval pipeline. Document scope routes to summaries or hybrid ranking; current-page scope follows a bounded page-overlap path."
                 chart={retrievalFlowDiagram}
               />
             </>
@@ -226,7 +228,10 @@ export const platformGroup: DocsGroup = {
                 A fast LLM call rewrites the question into a standalone query
                 (resolving references from recent history) and selects a
                 retrieval mode. If the call fails, a heuristic fallback inspects
-                the wording for summary-style intent.
+                the wording for summary-style intent. Document scope, the
+                default, follows that mode. An explicit current-page scope still
+                uses the standalone query for conversation context but always
+                retrieves chunks from that page rather than summaries.
               </p>
               <InfoGrid
                 items={[
@@ -234,7 +239,7 @@ export const platformGroup: DocsGroup = {
                     title: "chunks",
                     icon: QuoteDownIcon,
                     description:
-                      "Page-specific, quote-seeking, or clause-seeking questions. Routed to hybrid chunk retrieval.",
+                      "Within document scope, page-specific, quote-seeking, or clause-seeking questions route to hybrid chunk retrieval.",
                   },
                   {
                     title: "summaries",
@@ -253,8 +258,9 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                In chunks mode, two retrievers run against the document and
-                their results are unioned into a candidate set.
+                For a document-scoped question in chunks mode, two retrievers
+                run against the document and their results are unioned into a
+                candidate set.
               </p>
               <BulletList
                 items={[
@@ -263,6 +269,13 @@ export const platformGroup: DocsGroup = {
                   "Results are merged by chunk id into a single candidate pool.",
                 ]}
               />
+              <Callout type="note" title="Current-page candidate path">
+                Current-page scope bypasses vector search, full-text search, and
+                rank fusion. A composite index on document and chunk start page
+                reads at most 24 candidates whose start page is not after the
+                requested page, then retains only chunks whose page spans
+                overlap it.
+              </Callout>
               <Diagram
                 caption="Routing and hybrid candidate generation feeding rank fusion."
                 chart={retrievalFlowDiagram}
@@ -276,10 +289,11 @@ export const platformGroup: DocsGroup = {
           body: (
             <>
               <p>
-                Candidates are scored by their rank in each list using
-                reciprocal rank fusion, with the vector list weighted more
-                heavily. A small bonus rewards chunks that literally contain
-                query terms.
+                Document-scoped hybrid candidates are scored by their rank in
+                each list using reciprocal rank fusion, with the vector list
+                weighted more heavily. A small bonus rewards chunks that
+                literally contain query terms. Current-page candidates skip this
+                step and remain in document order.
               </p>
               <CodeBlock
                 title="Scoring (per candidate)"

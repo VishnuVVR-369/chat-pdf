@@ -195,6 +195,7 @@ export const streamChat = httpAction(async (ctx, req) => {
     content?: string;
     regenerate?: boolean;
     expectedAssistantMessageId?: string;
+    pageNumber?: number;
   };
 
   const declaredLength = Number(req.headers.get("content-length"));
@@ -230,6 +231,7 @@ export const streamChat = httpAction(async (ctx, req) => {
     content,
     regenerate,
     expectedAssistantMessageId,
+    pageNumber: requestedPageNumber,
   } = body;
 
   const isRegenerate = regenerate === true;
@@ -280,9 +282,20 @@ export const streamChat = httpAction(async (ctx, req) => {
     return jsonError(500, "Document is missing summary artifacts");
   }
 
+  if (
+    requestedPageNumber !== undefined &&
+    (!Number.isInteger(requestedPageNumber) ||
+      requestedPageNumber < 1 ||
+      document.pageCount === undefined ||
+      requestedPageNumber > document.pageCount)
+  ) {
+    return jsonError(400, "Invalid pageNumber");
+  }
+
   let conversationId: Id<"conversations">;
   let assistantMessageId: Id<"messages">;
   let queryContent: string;
+  let pageNumber: number | undefined;
   const isNewConversation = !isRegenerate && !rawConversationId;
 
   if (isRegenerate) {
@@ -308,8 +321,10 @@ export const streamChat = httpAction(async (ctx, req) => {
     }
     assistantMessageId = claim.assistantMessageId;
     queryContent = claim.userContent;
+    pageNumber = claim.pageNumber;
   } else {
     queryContent = (content as string).trim();
+    pageNumber = requestedPageNumber;
 
     if (rawConversationId) {
       const conversation = await ctx.runQuery(
@@ -338,6 +353,7 @@ export const streamChat = httpAction(async (ctx, req) => {
       conversationId,
       role: "user",
       content: queryContent,
+      ...(pageNumber !== undefined ? { pageNumber } : {}),
       status: "complete",
     });
 
@@ -418,7 +434,7 @@ export const streamChat = httpAction(async (ctx, req) => {
           return;
         }
 
-        if (routing.retrievalMode === "summaries") {
+        if (routing.retrievalMode === "summaries" && pageNumber === undefined) {
           const summaryContext = await ctx.runQuery(
             internal.chatData.getDocumentSummaryContext,
             {
@@ -506,6 +522,7 @@ export const streamChat = httpAction(async (ctx, req) => {
             documentId: documentId as Id<"documents">,
             ownerTokenIdentifier,
             query: routing.standaloneQuery,
+            ...(pageNumber !== undefined ? { pageNumber } : {}),
             signal: abort.signal,
           });
 

@@ -56,9 +56,12 @@ ChatPDF is a customer-facing web application for uploading PDFs and chatting wit
 
 ### Chat flow
 
-1. A user asks a question about the selected document.
-2. The system runs hybrid retrieval over the indexed chunks.
-3. Relevant context is sent to the model.
+1. A user asks a question about the selected document, using the default
+   document scope or explicitly choosing the current PDF page.
+2. Document-scoped questions use automatic routing between summaries and
+   hybrid chunk retrieval; page-scoped questions use only chunks that overlap
+   the selected page.
+3. The selected context is sent to the model.
 4. The answer is streamed back with citations.
 5. Citations link back to document pages and the highlighted source text.
 

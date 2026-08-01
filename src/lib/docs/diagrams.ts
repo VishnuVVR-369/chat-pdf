@@ -31,19 +31,22 @@ export const ingestionPipelineDiagram = `flowchart TB
 
 export const retrievalFlowDiagram = `flowchart TB
   Q(["User question"]) --> RT["LLM query routing<br/>standalone query + mode"]
-  RT -->|"summaries mode"| SUM["Document + page summaries"]
-  RT -->|"chunks mode"| EMB["Embed query"]
-  RT -->|"chunks mode"| L
+  RT --> SC{"Explicit page scope?"}
+  SC -->|"yes"| PG["Indexed page-overlap query<br/>bounded to 24 candidates"]
+  SC -->|"no · summaries mode"| SUM["Document + page summaries"]
+  SC -->|"no · chunks mode"| EMB["Embed query"]
+  SC -->|"no · chunks mode"| L
   subgraph HY["Hybrid retrieval"]
     direction LR
-    V["Vector search<br/>chunk embeddings · top 12"]
-    L["Full-text search<br/>keyword terms · top 12"]
+    V["Vector search<br/>chunk embeddings · top 24"]
+    L["Full-text search<br/>keyword terms · top 24"]
   end
   EMB --> V
   V --> RF["Reciprocal Rank Fusion<br/>vector 0.65 · lexical 0.35 · k = 60"]
   L --> RF
-  RF --> TOP["Top 6 chunks"]
+  RF --> TOP["Top 10 chunks<br/>+ nearby context"]
   TOP --> GEN["LLM answer<br/>structured JSON · streamed over SSE"]
+  PG --> GEN
   SUM --> GEN
   GEN --> CV["Citation validation<br/>verbatim quote · page-resolved · ≤ 4"]
   CV --> A(["Grounded, cited answer"])
@@ -79,15 +82,19 @@ export const chatSequenceDiagram = `sequenceDiagram
   participant CV as Convex HTTP action
   participant DB as Convex DB
   participant AI as OpenAI
-  UI->>CV: POST question + auth token
-  CV->>CV: verify identity · document ready
+  UI->>CV: POST question + auth token + optional page
+  CV->>CV: verify identity · owned ready document · page range
+  CV->>DB: save user message + optional page scope
   CV->>AI: route query → mode + standalone query
-  alt chunks mode
+  alt current-page scope
+    CV->>DB: bounded indexed page-overlap query
+    DB-->>CV: page chunks (at most 24 candidates)
+  else document scope · chunks mode
     CV->>AI: embed query
     CV->>DB: vector + full-text search
     DB-->>CV: candidate chunks
-    CV->>CV: rank fusion → top 6
-  else summaries mode
+    CV->>CV: rank fusion → top 10 + neighbors
+  else document scope · summaries mode
     CV->>DB: load document + page summaries
   end
   CV->>AI: stream structured answer
@@ -147,6 +154,7 @@ export const dataModelDiagram = `erDiagram
     id conversationId FK
     string role "user or assistant"
     string content
+    number pageNumber "optional question scope"
     object citations "chunkId refs"
   }
   documents ||--o{ documentPages : "1 : N  pages"
