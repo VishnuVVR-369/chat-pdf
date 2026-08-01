@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { captureEvent, captureException } from "@/lib/analytics";
 import { inspectPdfFile } from "@/lib/pdf-client";
 import { cn } from "@/lib/utils";
-import { MAX_PDF_PAGES } from "@/constants/pdf";
+import { MAX_PDF_FILE_SIZE_MIB, MAX_PDF_PAGES } from "@/constants/pdf";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 type UploadModalProps = {
@@ -302,7 +302,10 @@ export function UploadModal({
 
                       <div className="mt-6 flex items-center gap-1.5 text-xs text-stone-700">
                         <LockIcon />
-                        <span>PDF files · up to {MAX_PDF_PAGES} pages</span>
+                        <span>
+                          PDF files · up to {MAX_PDF_PAGES} pages ·{" "}
+                          {MAX_PDF_FILE_SIZE_MIB} MiB
+                        </span>
                       </div>
                     </button>
                   </motion.div>

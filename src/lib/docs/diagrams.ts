@@ -13,7 +13,7 @@ const BAD_NODE = "classDef badNode fill:#23100f,stroke:#f87171,color:#fecaca;";
 
 export const ingestionPipelineDiagram = `flowchart TB
   U(["PDF uploaded"]) --> S["Stored in Convex file storage<br/>+ document record created"]
-  S --> O["Mistral OCR 4<br/>OCR · every PDF · ≤ 100 pages"]
+  S --> O["Mistral OCR 4<br/>OCR · every PDF within upload limits"]
   O --> X["Extract page text<br/>from OCR output"]
   X --> C["Chunk text<br/>~450 words · 75 overlap<br/>page spans kept for citations"]
   C --> E["Embed chunks<br/>text-embedding-3-small · 1536-dim"]

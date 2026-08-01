@@ -13,7 +13,7 @@ import {
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { Button } from "@/components/ui/button";
-import { MAX_PDF_PAGES } from "@/constants/pdf";
+import { MAX_PDF_FILE_SIZE_MIB, MAX_PDF_PAGES } from "@/constants/pdf";
 import { inspectPdfFile } from "@/lib/pdf-client";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -346,9 +346,9 @@ export function DashboardPanel({
               </h2>
               <p className="max-w-2xl text-sm leading-7 text-slate-600">
                 Select a PDF to read its page count locally first. Files with
-                more than {MAX_PDF_PAGES} pages are rejected before upload, and
-                the backend enforces the same limit before creating the document
-                record.
+                more than {MAX_PDF_PAGES} pages or {MAX_PDF_FILE_SIZE_MIB} MiB
+                are rejected before upload, and the backend enforces the same
+                limits before creating the document record.
               </p>
             </div>
 

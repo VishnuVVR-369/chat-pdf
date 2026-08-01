@@ -21,6 +21,11 @@ import {
   summaryAnswerFormat,
   structuredAnswerFormat,
 } from "./chatHelpers";
+import {
+  MAX_CHAT_COMPLETION_TOKENS,
+  MAX_CHAT_QUESTION_CHARACTERS,
+  MAX_CHAT_REQUEST_BYTES,
+} from "../src/constants/chat";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -41,6 +46,34 @@ function jsonError(status: number, error: string): Response {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
+}
+
+async function readLimitedRequestBody(
+  req: Request,
+  maxBytes: number,
+): Promise<string | null> {
+  if (!req.body) return "";
+
+  const reader = req.body.getReader();
+  const decoder = new TextDecoder();
+  let body = "";
+  let bytesRead = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return body + decoder.decode();
+
+      bytesRead += value.byteLength;
+      if (bytesRead > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 function getChatConfig() {
@@ -77,6 +110,7 @@ async function streamStructuredAnswer(args: {
         ? { temperature: args.temperature }
         : {}),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+      max_completion_tokens: MAX_CHAT_COMPLETION_TOKENS,
       response_format: args.responseFormat,
       stream: true,
     }),
@@ -91,6 +125,7 @@ async function streamStructuredAnswer(args: {
   const decoder = new TextDecoder();
   let sseBuffer = "";
   let aborted = false;
+  let finishReason: string | null = null;
 
   try {
     while (true) {
@@ -105,13 +140,20 @@ async function streamStructuredAnswer(args: {
         if (!line.startsWith("data: ")) continue;
         const raw = line.slice("data: ".length).trim();
         if (raw === "[DONE]") break;
-        let parsed: { choices?: Array<{ delta?: { content?: string } }> };
+        let parsed: {
+          choices?: Array<{
+            delta?: { content?: string };
+            finish_reason?: string | null;
+          }>;
+        };
         try {
           parsed = JSON.parse(raw) as typeof parsed;
         } catch {
           continue;
         }
-        const delta = parsed.choices?.[0]?.delta?.content ?? "";
+        const choice = parsed.choices?.[0];
+        if (choice?.finish_reason) finishReason = choice.finish_reason;
+        const delta = choice?.delta?.content ?? "";
         if (!delta) continue;
         const decoded = extractor.feed(delta);
         if (decoded) {
@@ -123,6 +165,10 @@ async function streamStructuredAnswer(args: {
     // A client-driven stop aborts the fetch; surface partial output rather than throw.
     if (!isAbortError(err)) throw err;
     aborted = true;
+  }
+
+  if (!aborted && finishReason === "length") {
+    throw new Error("OpenAI completion reached its token limit");
   }
 
   return {
@@ -143,15 +189,37 @@ export const streamChat = httpAction(async (ctx, req) => {
   }
   const ownerTokenIdentifier = identity.tokenIdentifier;
 
-  let body: {
+  type ChatRequestBody = {
     documentId: string;
     conversationId?: string;
     content?: string;
     regenerate?: boolean;
     expectedAssistantMessageId?: string;
   };
+
+  const declaredLength = Number(req.headers.get("content-length"));
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > MAX_CHAT_REQUEST_BYTES
+  ) {
+    return jsonError(413, "Request body is too large");
+  }
+
+  let body: ChatRequestBody;
   try {
-    body = (await req.json()) as typeof body;
+    const rawBody = await readLimitedRequestBody(req, MAX_CHAT_REQUEST_BYTES);
+    if (rawBody === null) {
+      return jsonError(413, "Request body is too large");
+    }
+    const parsedBody: unknown = JSON.parse(rawBody);
+    if (
+      typeof parsedBody !== "object" ||
+      parsedBody === null ||
+      Array.isArray(parsedBody)
+    ) {
+      return jsonError(400, "Invalid JSON body");
+    }
+    body = parsedBody as ChatRequestBody;
   } catch {
     return jsonError(400, "Invalid JSON body");
   }
@@ -166,18 +234,33 @@ export const streamChat = httpAction(async (ctx, req) => {
 
   const isRegenerate = regenerate === true;
 
-  if (!documentId) {
+  if (typeof documentId !== "string" || !documentId) {
     return jsonError(400, "Missing documentId");
   }
+  if (
+    rawConversationId !== undefined &&
+    typeof rawConversationId !== "string"
+  ) {
+    return jsonError(400, "Invalid conversationId");
+  }
   if (isRegenerate) {
-    if (!rawConversationId || !expectedAssistantMessageId) {
+    if (
+      !rawConversationId ||
+      typeof expectedAssistantMessageId !== "string" ||
+      !expectedAssistantMessageId
+    ) {
       return jsonError(
         400,
         "Regeneration requires conversationId and expectedAssistantMessageId",
       );
     }
-  } else if (!content) {
+  } else if (typeof content !== "string" || !content.trim()) {
     return jsonError(400, "Missing content");
+  } else if (content.length > MAX_CHAT_QUESTION_CHARACTERS) {
+    return jsonError(
+      413,
+      `Questions must be ${MAX_CHAT_QUESTION_CHARACTERS} characters or fewer`,
+    );
   }
 
   const document = await ctx.runQuery(internal.documents.getOwnedDocument, {
@@ -226,7 +309,7 @@ export const streamChat = httpAction(async (ctx, req) => {
     assistantMessageId = claim.assistantMessageId;
     queryContent = claim.userContent;
   } else {
-    queryContent = content as string;
+    queryContent = (content as string).trim();
 
     if (rawConversationId) {
       const conversation = await ctx.runQuery(

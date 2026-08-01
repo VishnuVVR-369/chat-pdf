@@ -104,8 +104,16 @@ export const getStartedGroup: DocsGroup = {
                 items={[
                   {
                     title: "Upload a PDF",
-                    description:
-                      "The dashboard accepts text-based and scanned PDFs up to 100 pages.",
+                    description: (
+                      <>
+                        The dashboard accepts supported text-based and scanned
+                        PDFs. See the current limits in{" "}
+                        <Link href="/docs/using-chatpdf/uploading-pdfs#supported-files">
+                          Supported files
+                        </Link>
+                        .
+                      </>
+                    ),
                   },
                   {
                     title: "Process the document",
@@ -298,8 +306,12 @@ pnpm build`}</CodeBlock>
               </p>
               <Callout type="tip" title="Good first documents">
                 A short contract, a single research paper, or a product manual
-                section works well. Keep it under 100 pages — that is the OCR
-                batch limit.
+                section works well. Check the current page and file-size limits
+                in{" "}
+                <Link href="/docs/using-chatpdf/uploading-pdfs#supported-files">
+                  Supported files
+                </Link>
+                .
               </Callout>
             </>
           ),

@@ -16,6 +16,8 @@ import {
   StepList,
   Tabs,
 } from "@/components/docs/mdx";
+import { MAX_CHAT_QUESTION_CHARACTERS } from "@/constants/chat";
+import { MAX_PDF_FILE_SIZE_MIB, MAX_PDF_PAGES } from "@/constants/pdf";
 import { ingestionPipelineDiagram } from "../diagrams";
 import type { DocsGroup } from "../types";
 
@@ -103,7 +105,7 @@ export const usingChatPdfGroup: DocsGroup = {
               <BulletList
                 items={[
                   "Text-based PDFs and scanned PDFs — both are accepted.",
-                  "Up to 100 pages per document in this OCR pipeline.",
+                  `Files must be ${MAX_PDF_FILE_SIZE_MIB} MiB or smaller and no more than ${MAX_PDF_PAGES} pages.`,
                   "Research papers, contracts, manuals, financial reports, and other long-form documents.",
                 ]}
               />
@@ -202,6 +204,11 @@ export const usingChatPdfGroup: DocsGroup = {
                 retrieval to find evidence. Ask for named concepts, clauses,
                 dates, comparisons, or summaries tied to the uploaded document.
               </p>
+              <Callout type="note" title="Question length">
+                Questions can be up to{" "}
+                {MAX_CHAT_QUESTION_CHARACTERS.toLocaleString("en-US")}
+                {" characters long."}
+              </Callout>
               <Tabs
                 items={[
                   {
@@ -400,8 +407,15 @@ export const usingChatPdfGroup: DocsGroup = {
                 },
                 {
                   question: "What is the page limit?",
-                  answer:
-                    "The OCR pipeline supports up to 100 pages per document. Larger files are rejected before processing starts.",
+                  answer: (
+                    <>
+                      See the current page and file-size limits in{" "}
+                      <Link href="/docs/using-chatpdf/uploading-pdfs#supported-files">
+                        Supported files
+                      </Link>
+                      .
+                    </>
+                  ),
                 },
                 {
                   question: "A scanned table came out garbled — what now?",

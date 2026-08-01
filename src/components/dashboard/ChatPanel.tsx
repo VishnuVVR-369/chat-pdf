@@ -22,6 +22,7 @@ import {
   Time04Icon,
 } from "@hugeicons/core-free-icons";
 import { Streamdown } from "streamdown";
+import { MAX_CHAT_QUESTION_CHARACTERS } from "@/constants/chat";
 import { captureEvent, captureException } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
@@ -1065,6 +1066,7 @@ function ChatBody({
               ref={textareaRef}
               className="max-h-[120px] min-h-[24px] flex-1 resize-none bg-transparent text-base leading-relaxed text-stone-200 outline-none placeholder:text-stone-600 disabled:cursor-not-allowed"
               disabled={isGenerating}
+              maxLength={MAX_CHAT_QUESTION_CHARACTERS}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}

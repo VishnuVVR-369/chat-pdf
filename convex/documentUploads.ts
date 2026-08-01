@@ -1,13 +1,16 @@
 "use node";
 
-import { createHash } from "node:crypto";
 import { PDFDocument } from "pdf-lib";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { action, internalAction } from "./_generated/server";
-import { MAX_PDF_PAGES } from "../src/constants/pdf";
+import {
+  MAX_PDF_FILE_SIZE_BYTES,
+  MAX_PDF_FILE_SIZE_MIB,
+  MAX_PDF_PAGES,
+} from "../src/constants/pdf";
 
 function isPasswordProtectedPdfError(error: unknown) {
   return (
@@ -100,6 +103,41 @@ export const completeDirectUpload = action({
       throw new Error("Upload reservation could not be found.");
     }
 
+    const metadata = await ctx.runQuery(
+      internal.storageData.getStorageMetadata,
+      { storageId: args.storageId },
+    );
+
+    if (!metadata) {
+      await discardReservedUpload(
+        ctx,
+        null,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+      throw new Error("Uploaded PDF could not be found in Convex storage.");
+    }
+
+    if (metadata.size === 0) {
+      await discardReservedUpload(
+        ctx,
+        args.storageId,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+      throw new Error("Uploaded PDF is empty.");
+    }
+
+    if (metadata.size > MAX_PDF_FILE_SIZE_BYTES) {
+      await discardReservedUpload(
+        ctx,
+        args.storageId,
+        args.documentId,
+        ownerTokenIdentifier,
+      );
+      throw new Error(`PDFs must be ${MAX_PDF_FILE_SIZE_MIB} MiB or smaller.`);
+    }
+
     const pdfBlob = await ctx.storage.get(args.storageId);
 
     if (!pdfBlob) {
@@ -113,16 +151,6 @@ export const completeDirectUpload = action({
     }
 
     const contents = new Uint8Array(await pdfBlob.arrayBuffer());
-
-    if (contents.length === 0) {
-      await discardReservedUpload(
-        ctx,
-        args.storageId,
-        args.documentId,
-        ownerTokenIdentifier,
-      );
-      throw new Error("Uploaded PDF is empty.");
-    }
 
     const signature = Buffer.from(contents.subarray(0, 5)).toString("utf-8");
 
@@ -151,9 +179,10 @@ export const completeDirectUpload = action({
           documentId: args.documentId,
           ownerTokenIdentifier,
           fileStorageId: args.storageId,
-          contentType: pdfBlob.type || "application/pdf",
-          storageSize: pdfBlob.size || contents.length,
-          sha256: createHash("sha256").update(contents).digest("hex"),
+          contentType:
+            metadata.contentType || pdfBlob.type || "application/pdf",
+          storageSize: metadata.size,
+          sha256: metadata.sha256,
           pageCount,
         },
       );
