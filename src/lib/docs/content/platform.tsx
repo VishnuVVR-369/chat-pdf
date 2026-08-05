@@ -331,6 +331,13 @@ export const platformGroup: DocsGroup = {
                 returns a structured answer with quotes, and every quote is
                 checked before it is shown.
               </p>
+              <p>
+                The stored document summary is included separately as
+                context-only background to clarify the document type and its
+                terminology. Only the numbered chunks are citable evidence: the
+                model is forbidden from quoting or citing the background, and
+                citation validation accepts quotes only from those chunks.
+              </p>
               <StepList
                 items={[
                   {
