@@ -50,8 +50,10 @@ ChatPDF is a customer-facing web application for uploading PDFs and chatting wit
 
 1. A user uploads a PDF.
 2. The file and document metadata are stored.
-3. A background ingestion pipeline runs Mistral OCR to extract page text.
-4. The document is split into pages and chunks.
+3. A background ingestion pipeline runs Mistral OCR to extract page Markdown
+   and structural blocks.
+4. Page records and structure-aware retrieval chunks are built from the OCR
+   output.
 5. Embeddings are generated and stored for retrieval.
 
 ### Chat flow
