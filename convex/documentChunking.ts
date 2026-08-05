@@ -91,13 +91,22 @@ function findEquationEnd(lines: string[], index: number) {
   }
 
   const closingLine = trimmedLine === "\\[" ? "\\]" : "$$";
-  return lines.findIndex(
-    (candidate, candidateIndex) =>
-      candidateIndex > index &&
-      (closingLine === "$$"
-        ? candidate.trim().endsWith(closingLine)
-        : candidate.trim() === closingLine),
-  );
+  for (
+    let candidateIndex = index + 1;
+    candidateIndex < lines.length;
+    candidateIndex += 1
+  ) {
+    const candidate = lines[candidateIndex]?.trim() ?? "";
+    if (
+      closingLine === "$$"
+        ? candidate.endsWith(closingLine)
+        : candidate === closingLine
+    ) {
+      return candidateIndex;
+    }
+  }
+
+  return -1;
 }
 
 function splitMarkdownSegmentIntoUnits(markdown: string, pageNumber: number) {
@@ -142,10 +151,10 @@ function splitMarkdownSegmentIntoUnits(markdown: string, pageNumber: number) {
     }
 
     const trimmedLine = line.trim();
-    const equationEnd = findEquationEnd(lines, index);
 
     if (trimmedLine.startsWith("$$") || trimmedLine === "\\[") {
       flushPending();
+      const equationEnd = findEquationEnd(lines, index);
       const finalIndex = equationEnd >= index ? equationEnd : lines.length - 1;
       const content = sanitizeContent(
         lines.slice(index, finalIndex + 1).join("\n"),
