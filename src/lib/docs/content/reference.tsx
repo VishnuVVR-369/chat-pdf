@@ -81,7 +81,7 @@ const schemaTables: SchemaTable[] = [
   {
     name: "documentChunks",
     icon: Layers01Icon,
-    summary: "The retrieval unit — overlapping text windows with page spans.",
+    summary: "Stored structure-aware retrieval units with exact page spans.",
     columns: [
       { name: "_id", type: "id", badges: ["pk"] },
       {

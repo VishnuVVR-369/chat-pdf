@@ -143,8 +143,16 @@ export const usingChatPdfGroup: DocsGroup = {
                   },
                   {
                     title: "Chunk",
-                    description:
-                      "Text is split into ~450-word chunks with 75-word overlap, keeping page spans for citations.",
+                    description: (
+                      <>
+                        Structure-aware retrieval chunks retain OCR and Markdown
+                        units with exact page spans. See the{" "}
+                        <Link href="/docs/platform/retrieval-pipeline#indexing">
+                          retrieval pipeline
+                        </Link>{" "}
+                        for boundary and overlap rules.
+                      </>
+                    ),
                   },
                   {
                     title: "Embed & summarize",

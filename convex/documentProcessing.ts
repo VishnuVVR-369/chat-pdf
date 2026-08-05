@@ -10,6 +10,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { internalAction } from "./_generated/server";
+import { buildDocumentChunks, type DocumentChunk } from "./documentChunking";
 import { createOpenAiEmbeddingClient, loadOpenAiChatConfig } from "./openAi";
 import { modelSupportsTemperature } from "./modelCapabilities";
 import { MAX_SUMMARY_COMPLETION_TOKENS } from "../src/constants/chat";
@@ -20,8 +21,6 @@ const OCR_PAGE_LIMIT = 100;
 const EMBEDDING_DIMENSIONS = 1536;
 const EMBEDDING_REQUEST_BATCH_SIZE = 64;
 const DOCUMENT_PAGE_BATCH_SIZE = 32;
-const DOCUMENT_CHUNK_WORD_TARGET = 450;
-const DOCUMENT_CHUNK_WORD_OVERLAP = 75;
 const PAGE_SUMMARY_BATCH_SIZE = 10;
 const OCR_METHOD = "mistral_ocr" as const;
 const DEFAULT_MISTRAL_OCR_MODEL = "mistral-ocr-4-0";
@@ -106,21 +105,6 @@ type PageText = {
 
 type SummarizedPage = PageText & {
   summary: string;
-};
-
-type ChunkPageSpan = {
-  pageNumber: number;
-  startOffset: number;
-  endOffset: number;
-};
-
-type DocumentChunk = {
-  chunkIndex: number;
-  startPageNumber: number;
-  endPageNumber: number;
-  text: string;
-  tokenCount: number;
-  pageSpans: ChunkPageSpan[];
 };
 
 type EmbeddedChunk = DocumentChunk & {
@@ -410,96 +394,6 @@ Rules:
     summary: normalizeSummary(parsed.summary, EMPTY_DOCUMENT_SUMMARY),
     summaryModel: model,
   };
-}
-
-function tokenizeText(text: string) {
-  return text.match(/\S+/g) ?? [];
-}
-
-function buildDocumentChunks(pages: PageText[]): DocumentChunk[] {
-  const allTokens = pages.flatMap((page) =>
-    tokenizeText(page.extractedText).map((token) => ({
-      pageNumber: page.pageNumber,
-      token,
-    })),
-  );
-
-  if (allTokens.length === 0) {
-    const startPageNumber = pages[0]?.pageNumber ?? 1;
-    const endPageNumber = pages.at(-1)?.pageNumber ?? startPageNumber;
-    const text = "[No extractable text found in this PDF.]";
-
-    return [
-      {
-        chunkIndex: 0,
-        startPageNumber,
-        endPageNumber,
-        text,
-        tokenCount: tokenizeText(text).length,
-        pageSpans: [
-          {
-            pageNumber: startPageNumber,
-            startOffset: 0,
-            endOffset: text.length,
-          },
-        ],
-      },
-    ];
-  }
-
-  const chunks: DocumentChunk[] = [];
-  let start = 0;
-  let chunkIndex = 0;
-
-  while (start < allTokens.length) {
-    const end = Math.min(start + DOCUMENT_CHUNK_WORD_TARGET, allTokens.length);
-    const slice = allTokens.slice(start, end);
-    const parts: string[] = [];
-    const pageSpans: ChunkPageSpan[] = [];
-    let currentOffset = 0;
-
-    for (const [index, tokenInfo] of slice.entries()) {
-      if (index > 0) {
-        parts.push(" ");
-        currentOffset += 1;
-      }
-
-      const startOffset = currentOffset;
-      parts.push(tokenInfo.token);
-      currentOffset += tokenInfo.token.length;
-
-      const lastPageSpan = pageSpans[pageSpans.length - 1];
-      if (lastPageSpan?.pageNumber === tokenInfo.pageNumber) {
-        lastPageSpan.endOffset = currentOffset;
-      } else {
-        pageSpans.push({
-          pageNumber: tokenInfo.pageNumber,
-          startOffset,
-          endOffset: currentOffset,
-        });
-      }
-    }
-
-    chunks.push({
-      chunkIndex,
-      startPageNumber: pageSpans[0]?.pageNumber ?? slice[0].pageNumber,
-      endPageNumber:
-        pageSpans[pageSpans.length - 1]?.pageNumber ??
-        slice[slice.length - 1].pageNumber,
-      text: parts.join(""),
-      tokenCount: slice.length,
-      pageSpans,
-    });
-
-    if (end >= allTokens.length) {
-      break;
-    }
-
-    start = Math.max(start + 1, end - DOCUMENT_CHUNK_WORD_OVERLAP);
-    chunkIndex += 1;
-  }
-
-  return chunks;
 }
 
 async function embedDocumentChunks(chunks: DocumentChunk[]) {
@@ -792,7 +686,7 @@ export const runDocumentOcr = internalAction({
       }
       mistralFileId = result.mistralFileId;
       const pages = extractPageTexts(result.pages, document.pageCount);
-      const chunks = buildDocumentChunks(pages);
+      const chunks = buildDocumentChunks(result.pages, document.pageCount);
       const { embeddingModel, embeddedChunks } =
         await embedDocumentChunks(chunks);
       const summarizedPages = await generatePageSummaries(pages);

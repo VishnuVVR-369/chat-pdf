@@ -2,7 +2,8 @@
  * Mermaid diagram definitions for the docs.
  *
  * These are grounded in the real backend:
- * - convex/documentProcessing.ts  (ingestion: always-OCR, chunking, embeddings)
+ * - convex/documentProcessing.ts  (ingestion: always-OCR, embeddings)
+ * - convex/documentChunking.ts     (structure-aware chunk assembly)
  * - convex/chatHelpers.ts          (routing, hybrid retrieval, RRF, citations)
  * - convex/chatStream.ts           (SSE streaming chat HTTP action)
  * - convex/schema.ts               (data model + vector/text indexes)
@@ -15,7 +16,7 @@ export const ingestionPipelineDiagram = `flowchart TB
   U(["PDF uploaded"]) --> S["Stored in Convex file storage<br/>+ document record created"]
   S --> O["Mistral OCR 4<br/>OCR · every PDF within upload limits"]
   O --> X["Extract page text<br/>from OCR output"]
-  X --> C["Chunk text<br/>~450 words · 75 overlap<br/>page spans kept for citations"]
+  O --> C["Build retrieval chunks<br/>preserve structure · exact page spans"]
   C --> E["Embed chunks<br/>text-embedding-3-small · 1536-dim"]
   X --> P["Per-page summaries<br/>LLM"]
   P --> D["Document summary<br/>LLM"]

@@ -148,11 +148,14 @@ export const platformGroup: DocsGroup = {
           title: "Indexing",
           body: (
             <p>
-              Indexing transforms OCR-extracted pages into overlapping chunks,
-              attaches page-span metadata, and creates embeddings. Page and
-              document summaries are generated alongside the chunks. The goal is
-              to preserve enough page context for citations while keeping
-              retrieval precise.
+              Indexing prefers Mistral OCR blocks and falls back to parsing page
+              Markdown into structural units. It assembles chunks around a
+              450-word target with roughly 75 words of overlap at whole-unit
+              boundaries where possible. Tables remain intact even above the
+              target; oversized prose alone is split at paragraph, sentence,
+              then word boundaries. Exact page spans map chunk offsets back to
+              citation pages. Page and document summaries are generated
+              alongside the chunks.
             </p>
           ),
         },
