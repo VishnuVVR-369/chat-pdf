@@ -9,6 +9,7 @@ import {
 import { buildDocumentChunks } from "./documentChunking";
 
 type OcrBlock = NonNullable<OCRPageObject["blocks"]>[number];
+type OcrTable = NonNullable<OCRPageObject["tables"]>[number];
 
 function block(type: OcrBlock["type"], content: string): OcrBlock {
   return {
@@ -26,6 +27,7 @@ function page(
   index: number,
   markdown: string,
   blocks?: OCRPageObject["blocks"],
+  tables?: OCRPageObject["tables"],
 ): OCRPageObject {
   return {
     index,
@@ -33,7 +35,12 @@ function page(
     images: [],
     dimensions: null,
     ...(blocks === undefined ? {} : { blocks }),
+    ...(tables === undefined ? {} : { tables }),
   };
+}
+
+function table(id: string, content: string): OcrTable {
+  return { id, content, format: "markdown" };
 }
 
 describe("buildDocumentChunks", () => {
@@ -123,6 +130,82 @@ describe("buildDocumentChunks", () => {
     expect(chunks[0]?.text).not.toContain("| Name | Score | | :--- | ---: |");
   });
 
+  test("resolves separately extracted table placeholders in fallback Markdown", () => {
+    const tableContent = [
+      "| Metric | Value |",
+      "| - | :-: |",
+      "| Revenue | $42 |",
+    ].join("\n");
+    const chunks = buildDocumentChunks(
+      [
+        page(
+          0,
+          [
+            "Before the table.",
+            "",
+            "[tbl-0.md](tbl-0.md)",
+            "",
+            "After it.",
+          ].join("\n"),
+          undefined,
+          [table("tbl-0.md", tableContent)],
+        ),
+      ],
+      1,
+      { targetWords: 100, overlapWords: 10 },
+    );
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.text).toBe(
+      ["Before the table.", tableContent, "After it."].join("\n\n"),
+    );
+    expect(chunks[0]?.text).not.toContain("[tbl-0.md](tbl-0.md)");
+  });
+
+  test("keeps single-column tables with short aligned delimiters intact", () => {
+    const singleColumnTable = [
+      "| Status |",
+      "| :-: |",
+      "| waiting for customer confirmation |",
+      "| ready for final approval |",
+    ].join("\n");
+    const chunks = buildDocumentChunks([page(0, singleColumnTable)], 1, {
+      targetWords: 3,
+      overlapWords: 1,
+    });
+
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]?.text).toBe(singleColumnTable);
+  });
+
+  test("keeps provider and fallback non-prose blocks atomic", () => {
+    const code = "const total = values.reduce((sum, value) => sum + value, 0);";
+    const equation = "E = m c squared with additional explanatory symbols";
+    const providerChunks = buildDocumentChunks(
+      [page(0, "unused", [block("code", code), block("equation", equation)])],
+      1,
+      { targetWords: 3, overlapWords: 1 },
+    );
+    const fencedCode = [
+      "```ts",
+      "const first = one two three four;",
+      "const second = five six seven eight;",
+      "```",
+    ].join("\n");
+    const displayEquation = ["$$", "a b c d e f g h", "$$"].join("\n");
+    const fallbackChunks = buildDocumentChunks(
+      [page(0, [fencedCode, "", displayEquation].join("\n"))],
+      1,
+      { targetWords: 3, overlapWords: 1 },
+    );
+
+    expect(providerChunks.map((chunk) => chunk.text)).toEqual([code, equation]);
+    expect(fallbackChunks.map((chunk) => chunk.text)).toEqual([
+      fencedCode,
+      displayEquation,
+    ]);
+  });
+
   test("splits oversized prose at sentences and overlaps whole sentences", () => {
     const chunks = buildDocumentChunks(
       [
@@ -151,6 +234,20 @@ describe("buildDocumentChunks", () => {
       "one two three",
       "four five six",
       "seven",
+    ]);
+  });
+
+  test("retains overlap while advancing past single-unit prose chunks", () => {
+    const chunks = buildDocumentChunks(
+      [page(0, "one two three four five six seven eight nine")],
+      1,
+      { targetWords: 4, overlapWords: 2 },
+    );
+
+    expect(chunks.map((chunk) => chunk.text)).toEqual([
+      "one two three four",
+      "three four\n\nfive six seven eight",
+      "seven eight\n\nnine",
     ]);
   });
 

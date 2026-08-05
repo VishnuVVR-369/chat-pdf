@@ -27,7 +27,7 @@ export type DocumentChunkingOptions = {
 type ChunkUnit = {
   pageNumber: number;
   text: string;
-  kind: "content" | "table";
+  kind: "prose" | "atomic" | "table";
 };
 
 function sanitizeContent(text: string) {
@@ -42,17 +42,41 @@ function countWords(text: string) {
   return text.match(/\S+/g)?.length ?? 0;
 }
 
-function isMarkdownTableDelimiter(line: string) {
+function splitMarkdownTableRow(line: string) {
   const normalized = line.trim().replace(/^\|/, "").replace(/\|$/, "");
-  const cells = normalized.split("|").map((cell) => cell.trim());
-  return cells.length >= 2 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+  const cells: string[] = [];
+  let currentCell = "";
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const character = normalized[index] ?? "";
+    if (character === "\\" && normalized[index + 1] === "|") {
+      currentCell += "\\|";
+      index += 1;
+      continue;
+    }
+    if (character === "|") {
+      cells.push(currentCell.trim());
+      currentCell = "";
+      continue;
+    }
+    currentCell += character;
+  }
+
+  cells.push(currentCell.trim());
+  return cells;
 }
 
 function isMarkdownTableStart(lines: string[], index: number) {
+  const header = lines[index];
+  const delimiter = lines[index + 1];
+  if (!header?.includes("|") || delimiter === undefined) return false;
+
+  const headerCells = splitMarkdownTableRow(header);
+  const delimiterCells = splitMarkdownTableRow(delimiter);
   return (
-    lines[index]?.includes("|") === true &&
-    lines[index + 1] !== undefined &&
-    isMarkdownTableDelimiter(lines[index + 1])
+    headerCells.length === delimiterCells.length &&
+    delimiterCells.length > 0 &&
+    delimiterCells.every((cell) => /^:?-+:?$/.test(cell))
   );
 }
 
@@ -60,7 +84,23 @@ function getFenceMarker(line: string) {
   return line.match(/^\s{0,3}(`{3,}|~{3,})/)?.[1] ?? null;
 }
 
-function splitMarkdownIntoUnits(markdown: string, pageNumber: number) {
+function findEquationEnd(lines: string[], index: number) {
+  const trimmedLine = lines[index]?.trim() ?? "";
+  if (trimmedLine.startsWith("$$") && trimmedLine.slice(2).includes("$$")) {
+    return index;
+  }
+
+  const closingLine = trimmedLine === "\\[" ? "\\]" : "$$";
+  return lines.findIndex(
+    (candidate, candidateIndex) =>
+      candidateIndex > index &&
+      (closingLine === "$$"
+        ? candidate.trim().endsWith(closingLine)
+        : candidate.trim() === closingLine),
+  );
+}
+
+function splitMarkdownSegmentIntoUnits(markdown: string, pageNumber: number) {
   const text = sanitizeContent(markdown);
   if (!text) return [];
 
@@ -72,7 +112,7 @@ function splitMarkdownIntoUnits(markdown: string, pageNumber: number) {
     const content = sanitizeContent(pendingLines.join("\n"));
     pendingLines = [];
     if (content) {
-      units.push({ pageNumber, text: content, kind: "content" });
+      units.push({ pageNumber, text: content, kind: "prose" });
     }
   };
 
@@ -96,8 +136,24 @@ function splitMarkdownIntoUnits(markdown: string, pageNumber: number) {
 
       const content = sanitizeContent(fencedLines.join("\n"));
       if (content) {
-        units.push({ pageNumber, text: content, kind: "content" });
+        units.push({ pageNumber, text: content, kind: "atomic" });
       }
+      continue;
+    }
+
+    const trimmedLine = line.trim();
+    const equationEnd = findEquationEnd(lines, index);
+
+    if (trimmedLine.startsWith("$$") || trimmedLine === "\\[") {
+      flushPending();
+      const finalIndex = equationEnd >= index ? equationEnd : lines.length - 1;
+      const content = sanitizeContent(
+        lines.slice(index, finalIndex + 1).join("\n"),
+      );
+      if (content) {
+        units.push({ pageNumber, text: content, kind: "atomic" });
+      }
+      index = finalIndex;
       continue;
     }
 
@@ -129,7 +185,43 @@ function splitMarkdownIntoUnits(markdown: string, pageNumber: number) {
 
     if (/^\s{0,3}#{1,6}\s+/.test(line)) {
       flushPending();
-      units.push({ pageNumber, text: line, kind: "content" });
+      units.push({ pageNumber, text: line, kind: "atomic" });
+      continue;
+    }
+
+    if (/^(?: {4}|\t)\S/.test(line)) {
+      flushPending();
+      const indentedCodeLines = [line];
+      while (
+        index + 1 < lines.length &&
+        (/^(?: {4}|\t)/.test(lines[index + 1] ?? "") ||
+          (lines[index + 1]?.trim() === "" &&
+            /^(?: {4}|\t)/.test(lines[index + 2] ?? "")))
+      ) {
+        index += 1;
+        indentedCodeLines.push(lines[index] ?? "");
+      }
+      const content = sanitizeContent(indentedCodeLines.join("\n"));
+      if (content) {
+        units.push({ pageNumber, text: content, kind: "atomic" });
+      }
+      continue;
+    }
+
+    if (
+      /^\s{0,3}(?:>|[-+*]\s+|\d+[.)]\s+|(?:[-*_]\s*){3,})/.test(line) ||
+      /^\s{0,3}<[A-Za-z][^>]*>/.test(line)
+    ) {
+      flushPending();
+      const structuralLines = [line];
+      while (index + 1 < lines.length && lines[index + 1]?.trim() !== "") {
+        index += 1;
+        structuralLines.push(lines[index] ?? "");
+      }
+      const content = sanitizeContent(structuralLines.join("\n"));
+      if (content) {
+        units.push({ pageNumber, text: content, kind: "atomic" });
+      }
       continue;
     }
 
@@ -140,24 +232,97 @@ function splitMarkdownIntoUnits(markdown: string, pageNumber: number) {
   return units;
 }
 
+function splitMarkdownIntoUnits(page: OCRPageObject, pageNumber: number) {
+  const markdown = sanitizeContent(page.markdown);
+  const tables = (page.tables ?? []).flatMap((table) => {
+    const content = sanitizeContent(table.content);
+    return content ? [{ id: table.id, content }] : [];
+  });
+  const units: ChunkUnit[] = [];
+  const resolvedTableIds = new Set<string>();
+  let cursor = 0;
+
+  while (cursor < markdown.length) {
+    let nextTable:
+      | { id: string; content: string; placeholderIndex: number }
+      | undefined;
+
+    for (const table of tables) {
+      const placeholder = `[${table.id}](${table.id})`;
+      const placeholderIndex = markdown.indexOf(placeholder, cursor);
+      if (
+        placeholderIndex >= 0 &&
+        (nextTable === undefined ||
+          placeholderIndex < nextTable.placeholderIndex)
+      ) {
+        nextTable = { ...table, placeholderIndex };
+      }
+    }
+
+    if (!nextTable) break;
+    units.push(
+      ...splitMarkdownSegmentIntoUnits(
+        markdown.slice(cursor, nextTable.placeholderIndex),
+        pageNumber,
+      ),
+    );
+    units.push({ pageNumber, text: nextTable.content, kind: "table" });
+    resolvedTableIds.add(nextTable.id);
+    cursor =
+      nextTable.placeholderIndex + `[${nextTable.id}](${nextTable.id})`.length;
+  }
+
+  units.push(
+    ...splitMarkdownSegmentIntoUnits(markdown.slice(cursor), pageNumber),
+  );
+
+  for (const table of tables) {
+    if (
+      !resolvedTableIds.has(table.id) &&
+      !markdown.includes(table.content) &&
+      !units.some(
+        (unit) => unit.kind === "table" && unit.text === table.content,
+      )
+    ) {
+      units.push({ pageNumber, text: table.content, kind: "table" });
+    }
+  }
+
+  return units;
+}
+
 function getPageUnits(page: OCRPageObject): ChunkUnit[] {
   const pageNumber = page.index + 1;
+  const tablesById = new Map(
+    (page.tables ?? []).map((table) => [table.id, table.content]),
+  );
   const blockUnits = (page.blocks ?? []).flatMap((block) => {
     if (!("content" in block) || typeof block.content !== "string") return [];
-    const content = sanitizeContent(block.content);
+    const tableContent =
+      block.type === "table" &&
+      "tableId" in block &&
+      typeof block.tableId === "string"
+        ? tablesById.get(block.tableId)
+        : undefined;
+    const content = sanitizeContent(tableContent ?? block.content);
     if (!content) return [];
     return [
       {
         pageNumber,
         text: content,
-        kind: block.type === "table" ? "table" : "content",
+        kind:
+          block.type === "table"
+            ? "table"
+            : block.type === "text"
+              ? "prose"
+              : "atomic",
       } satisfies ChunkUnit,
     ];
   });
 
   return blockUnits.length > 0
     ? blockUnits
-    : splitMarkdownIntoUnits(page.markdown, pageNumber);
+    : splitMarkdownIntoUnits(page, pageNumber);
 }
 
 function splitAtParagraphBoundaries(text: string) {
@@ -218,7 +383,7 @@ function hardSplitByWords(text: string, targetWords: number) {
 }
 
 function splitOversizedContentUnit(unit: ChunkUnit, targetWords: number) {
-  if (unit.kind === "table" || countWords(unit.text) <= targetWords) {
+  if (unit.kind !== "prose" || countWords(unit.text) <= targetWords) {
     return [unit];
   }
 
@@ -280,41 +445,69 @@ function assembleChunk(units: ChunkUnit[], chunkIndex: number): DocumentChunk {
   };
 }
 
-function findOverlapStart(
-  units: ChunkUnit[],
-  chunkStart: number,
-  chunkEnd: number,
+function takeWordSuffix(text: string, wordCount: number) {
+  const words = Array.from(text.matchAll(/\S+/g));
+  const firstWord = words[Math.max(0, words.length - wordCount)];
+  return sanitizeContent(text.slice(firstWord?.index ?? 0));
+}
+
+function buildProseOverlapUnit(unit: ChunkUnit, overlapWords: number) {
+  if (countWords(unit.text) <= overlapWords) return unit;
+
+  const sentences = splitAtSentenceBoundaries(unit.text);
+  const selectedSentences: string[] = [];
+  let selectedWords = 0;
+
+  for (let index = sentences.length - 1; index >= 0; index -= 1) {
+    const sentence = sentences[index];
+    if (!sentence) continue;
+    const sentenceWords = countWords(sentence);
+    if (sentenceWords > overlapWords && selectedSentences.length === 0) {
+      return { ...unit, text: takeWordSuffix(sentence, overlapWords) };
+    }
+    if (
+      selectedSentences.length > 0 &&
+      selectedWords + sentenceWords > overlapWords
+    ) {
+      break;
+    }
+    selectedSentences.unshift(sentence);
+    selectedWords += sentenceWords;
+    if (selectedWords >= overlapWords) break;
+  }
+
+  const text = sanitizeContent(selectedSentences.join(""));
+  return text ? { ...unit, text } : undefined;
+}
+
+function selectOverlapUnits(
+  chunkUnits: ChunkUnit[],
   targetWords: number,
   overlapWords: number,
 ) {
-  if (overlapWords <= 0 || chunkEnd - chunkStart <= 1) return chunkEnd;
+  if (overlapWords <= 0) return [];
 
-  const nextUnitWords = countWords(units[chunkEnd]?.text ?? "");
-  if (nextUnitWords > targetWords) return chunkEnd;
-
-  let overlapStart = chunkEnd;
+  const selectedUnits: ChunkUnit[] = [];
   let selectedWords = 0;
 
-  for (let index = chunkEnd - 1; index > chunkStart; index -= 1) {
-    const unit = units[index];
+  for (let index = chunkUnits.length - 1; index >= 0; index -= 1) {
+    const unit = chunkUnits[index];
     if (!unit) continue;
     const unitWords = countWords(unit.text);
-    if (unit.kind === "table" && unitWords > targetWords) break;
+    if (unit.kind !== "prose" && unitWords > targetWords) break;
 
-    overlapStart = index;
+    if (unit.kind === "prose" && unitWords > overlapWords) {
+      const overlapUnit = buildProseOverlapUnit(unit, overlapWords);
+      if (overlapUnit) selectedUnits.unshift(overlapUnit);
+      break;
+    }
+
+    selectedUnits.unshift(unit);
     selectedWords += unitWords;
     if (selectedWords >= overlapWords) break;
   }
 
-  while (overlapStart < chunkEnd) {
-    const overlapWordCount = units
-      .slice(overlapStart, chunkEnd)
-      .reduce((total, unit) => total + countWords(unit.text), 0);
-    if (overlapWordCount + nextUnitWords <= targetWords) break;
-    overlapStart += 1;
-  }
-
-  return overlapStart;
+  return selectedUnits;
 }
 
 export function buildDocumentChunks(
@@ -370,23 +563,37 @@ export function buildDocumentChunks(
 
   const chunks: DocumentChunk[] = [];
   let start = 0;
+  let overlapUnits: ChunkUnit[] = [];
 
   while (start < units.length) {
     let end = start;
-    let currentWords = 0;
+    const firstNewUnit = units[start];
+    const shouldIsolateFirstUnit =
+      firstNewUnit !== undefined &&
+      firstNewUnit.kind !== "prose" &&
+      countWords(firstNewUnit.text) > targetWords;
+    const chunkUnits = shouldIsolateFirstUnit ? [] : [...overlapUnits];
+    let currentWords = chunkUnits.reduce(
+      (total, unit) => total + countWords(unit.text),
+      0,
+    );
 
     while (end < units.length) {
       const unitWords = countWords(units[end]?.text ?? "");
       if (end > start && currentWords + unitWords > targetWords) break;
+      const unit = units[end];
+      if (!unit) break;
+      chunkUnits.push(unit);
       currentWords += unitWords;
       end += 1;
       if (unitWords > targetWords) break;
     }
 
-    chunks.push(assembleChunk(units.slice(start, end), chunks.length));
+    chunks.push(assembleChunk(chunkUnits, chunks.length));
     if (end >= units.length) break;
 
-    start = findOverlapStart(units, start, end, targetWords, overlapWords);
+    overlapUnits = selectOverlapUnits(chunkUnits, targetWords, overlapWords);
+    start = end;
   }
 
   return chunks;
