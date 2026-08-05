@@ -97,7 +97,7 @@ function parseSse(text: string) {
     .map((data) => JSON.parse(data) as Record<string, unknown>);
 }
 
-function mockOpenAi() {
+function mockOpenAi(options: { chunkCitationQuote?: string } = {}) {
   const requestBodies: Array<Record<string, unknown>> = [];
   const fetchMock = vi.fn(
     async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -147,6 +147,7 @@ function mockOpenAi() {
                 {
                   sourceId: pageTwoSourceId ?? "S1",
                   quote:
+                    options.chunkCitationQuote ??
                     "Page two contains beta-only evidence for scoped retrieval.",
                 },
               ],
@@ -454,6 +455,61 @@ describe("page-aware questioning", () => {
     ]);
     expect(requestBodies.some((body) => typeof body.input === "string")).toBe(
       true,
+    );
+    const prompt = answerSystemPrompts(requestBodies).at(-1)!;
+    expect(prompt).toContain(
+      "Document background (context only, never cite this):",
+    );
+    expect(prompt).toContain("The handbook explains alpha, beta, and gamma.");
+    expect(prompt).toContain(
+      "Page two contains beta-only evidence for scoped retrieval.",
+    );
+  });
+
+  test("rejects a summary-only quote from chunk-mode HTTP stream citations", async () => {
+    const t = createTestBackend();
+    const documentId = await seedReadyDocumentWithEvidence(t);
+    const summaryOnlyQuote = "The handbook explains alpha, beta, and gamma.";
+    const { requestBodies } = mockOpenAi({
+      chunkCitationQuote: summaryOnlyQuote,
+    });
+    const authed = t.withIdentity({ tokenIdentifier: OWNER });
+
+    const response = await authed.fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        documentId,
+        content: "Where is the beta-only evidence?",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const events = parseSse(await response.text());
+    const done = events.find((event) => event.type === "done");
+    expect(done).toMatchObject({
+      type: "done",
+      content: "Evidence-grounded chunk answer.",
+      citations: [],
+    });
+
+    const meta = events.find((event) => event.type === "meta");
+    const messages = await authed.query(api.chatData.getConversationMessages, {
+      conversationId: meta?.conversationId as Id<"conversations">,
+    });
+    expect(messages.at(-1)).toMatchObject({
+      role: "assistant",
+      content: "Evidence-grounded chunk answer.",
+      status: "complete",
+      citations: [],
+    });
+
+    const prompt = answerSystemPrompts(requestBodies).at(-1)!;
+    expect(prompt).toContain(
+      `Document background (context only, never cite this):\n${summaryOnlyQuote}`,
+    );
+    expect(prompt).toContain(
+      "Sources:\n[S1] page 1\nPage one contains alpha evidence for the handbook.",
     );
   });
 });
