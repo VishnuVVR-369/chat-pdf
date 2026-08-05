@@ -543,7 +543,11 @@ export const streamChat = httpAction(async (ctx, req) => {
             return;
           }
 
-          const systemPrompt = buildChunkSystemPrompt(document.title, chunks);
+          const systemPrompt = buildChunkSystemPrompt(
+            document.title,
+            document.documentSummary,
+            chunks,
+          );
           const chatMessages = [
             { role: "system" as const, content: systemPrompt },
             ...history.map((m) => ({

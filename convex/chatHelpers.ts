@@ -435,7 +435,11 @@ export function applyRankFusionScore(
   });
 }
 
-export function buildChunkSystemPrompt(title: string, chunks: RankedChunk[]) {
+export function buildChunkSystemPrompt(
+  title: string,
+  documentSummary: string,
+  chunks: RankedChunk[],
+) {
   const sources =
     chunks.length > 0
       ? chunks
@@ -451,7 +455,7 @@ export function buildChunkSystemPrompt(title: string, chunks: RankedChunk[]) {
 
   return `You answer questions about a PDF titled "${title}".
 
-Use ONLY the provided sources. If the answer is not fully supported by the sources, say that you could not find enough evidence in the document.
+Use the document background only to understand the kind of document and disambiguate its terminology. Use ONLY the numbered sources as evidence for the answer. If the answer is not fully supported by the sources, say that you could not find enough evidence in the document.
 
 Return JSON with this exact shape:
 {
@@ -460,11 +464,16 @@ Return JSON with this exact shape:
 }
 
 Rules:
+- never quote, cite, or treat the document background as evidence
+- support every factual claim with the numbered sources
 - cite only the provided source IDs
-- each quote must be copied verbatim as one contiguous substring from the cited source
+- each quote must be copied verbatim as one contiguous substring from a numbered source, never from the document background
 - include 1 to 4 citations when the answer is supported
 - return an empty citations array when the answer is not supported
 - do not mention any source ID in the answer body
+
+Document background (context only, never cite this):
+${documentSummary}
 
 Sources:
 ${sources}`;

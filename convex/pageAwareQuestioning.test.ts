@@ -455,5 +455,13 @@ describe("page-aware questioning", () => {
     expect(requestBodies.some((body) => typeof body.input === "string")).toBe(
       true,
     );
+    const prompt = answerSystemPrompts(requestBodies).at(-1)!;
+    expect(prompt).toContain(
+      "Document background (context only, never cite this):",
+    );
+    expect(prompt).toContain("The handbook explains alpha, beta, and gamma.");
+    expect(prompt).toContain(
+      "Page two contains beta-only evidence for scoped retrieval.",
+    );
   });
 });
