@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 const navLinks = [
   { label: "Features", href: "#features" },
   { label: "How it works", href: "#how-it-works" },
+  { label: "Benchmarks", href: "/eval" },
   { label: "Docs", href: "/docs" },
 ];
 
@@ -325,6 +326,26 @@ export function LandingPage() {
               Trusted by <span className="text-stone-300">researchers</span>{" "}
               &amp; <span className="text-stone-300">professionals</span>
             </p>
+          </motion.div>
+
+          <motion.div variants={fadeUp} className="mt-5 flex justify-center">
+            <Link
+              href="/eval"
+              className="group inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 text-sm font-medium text-amber-300/90 transition-colors hover:border-amber-500/35 hover:bg-amber-500/10 hover:text-amber-200"
+            >
+              See our benchmark results
+              <svg
+                className="h-3.5 w-3.5 -translate-x-0.5 transition-transform duration-200 group-hover:translate-x-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </Link>
           </motion.div>
 
           <motion.div
@@ -676,6 +697,11 @@ export function LandingPage() {
                 <li>
                   <Link href="#how-it-works" className="hover:text-stone-200">
                     How it works
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/eval" className="hover:text-stone-200">
+                    Benchmarks
                   </Link>
                 </li>
                 <li>

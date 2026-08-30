@@ -1,0 +1,339 @@
+{
+  "generatedAt": "2026-08-29T19:45:26.856Z",
+  "run": {
+    "id": "2026-08-29T19-01-25-162Z-effb0ab",
+    "completedAt": "2026-08-29T19:12:05.374Z",
+    "datasetVersion": "1.1.0",
+    "corpusVersion": "1.0.0",
+    "answerModel": "gpt-5.4-mini",
+    "judgeModel": "gpt-5.6-luna",
+    "embeddingModel": "text-embedding-3-small",
+    "judgePasses": 2,
+    "casesEvaluated": 59,
+    "casesTotal": 60,
+    "wallClockMs": 640211
+  },
+  "corpus": {
+    "documentCount": 5,
+    "pageCount": 237,
+    "documents": [
+      {
+        "key": "nist-ai-rmf-1.0",
+        "title": "Artificial Intelligence Risk Management Framework (AI RMF 1.0)",
+        "pageCount": 48,
+        "publicationDate": "2023-01-26"
+      },
+      {
+        "key": "nist-csf-2.0",
+        "title": "The NIST Cybersecurity Framework (CSF) 2.0",
+        "pageCount": 32,
+        "publicationDate": "2024-02-26"
+      },
+      {
+        "key": "cisa-zero-trust-maturity-model-2.0",
+        "title": "Zero Trust Maturity Model Version 2.0",
+        "pageCount": 32,
+        "publicationDate": "2023-04-01"
+      },
+      {
+        "key": "federal-reserve-economic-well-being-2024",
+        "title": "Economic Well-Being of U.S. Households in 2024",
+        "pageCount": 90,
+        "publicationDate": "2025-05-28"
+      },
+      {
+        "key": "omb-circular-a-123-2026",
+        "title": "OMB Circular No. A-123: Management's Responsibility for Internal Control",
+        "pageCount": 35,
+        "publicationDate": "2026-03-10"
+      }
+    ]
+  },
+  "gates": [
+    {
+      "label": "Retrieval",
+      "blurb": "The evidence needed to answer reached the model's context window.",
+      "value": 0.9831,
+      "low": 0.91,
+      "high": 0.997,
+      "passed": 58,
+      "total": 59
+    },
+    {
+      "label": "Content",
+      "blurb": "The answer is correct, complete, and faithful to the retrieved sources.",
+      "value": 0.9153,
+      "low": 0.8165,
+      "high": 0.9633,
+      "passed": 54,
+      "total": 59
+    },
+    {
+      "label": "Citations",
+      "blurb": "Every claim is attributable to a quote that exists in the document.",
+      "value": 0.9322,
+      "low": 0.8382,
+      "high": 0.9733,
+      "passed": 55,
+      "total": 59
+    },
+    {
+      "label": "Behaviour",
+      "blurb": "The system abstains when it should and respects page scoping.",
+      "value": 0.9831,
+      "low": 0.91,
+      "high": 0.997,
+      "passed": 58,
+      "total": 59
+    },
+    {
+      "label": "End to end",
+      "blurb": "All four gates passed on the same question.",
+      "value": 0.8644,
+      "low": 0.7546,
+      "high": 0.9297,
+      "passed": 51,
+      "total": 59
+    }
+  ],
+  "failures": [
+    {
+      "key": "system_error",
+      "label": "System error",
+      "description": "The case never produced a judgeable answer.",
+      "count": 1
+    },
+    {
+      "key": "abstention_failure",
+      "label": "Abstention failure",
+      "description": "Answered a question the document cannot support, or refused an answerable one.",
+      "count": 1
+    },
+    {
+      "key": "content_failure",
+      "label": "Content failure",
+      "description": "Grounded in the sources but incorrect, incomplete, or off-question.",
+      "count": 4
+    },
+    {
+      "key": "citation_failure",
+      "label": "Citation failure",
+      "description": "The answer itself is right; the citations are missing, wrong, or unverifiable.",
+      "count": 3
+    }
+  ],
+  "dimensions": [
+    {
+      "label": "Groundedness",
+      "value": 3.97,
+      "lowerIsBetter": false
+    },
+    {
+      "label": "Answer correctness",
+      "value": 3.91,
+      "lowerIsBetter": false
+    },
+    {
+      "label": "Citation correctness",
+      "value": 3.89,
+      "lowerIsBetter": false
+    },
+    {
+      "label": "Retrieval sufficiency",
+      "value": 3.89,
+      "lowerIsBetter": false
+    },
+    {
+      "label": "Evidence coverage",
+      "value": 3.88,
+      "lowerIsBetter": false
+    },
+    {
+      "label": "Completeness",
+      "value": 3.67,
+      "lowerIsBetter": false
+    },
+    {
+      "label": "Context noise",
+      "value": 2.37,
+      "lowerIsBetter": true
+    }
+  ],
+  "citations": {
+    "emitted": 116,
+    "validated": 106,
+    "validationRate": 0.9138,
+    "casesWithCitations": 0.8814
+  },
+  "byType": [
+    {
+      "name": "single_turn",
+      "count": 34,
+      "retrieval": 1,
+      "content": 0.9118,
+      "citations": 0.9412,
+      "endToEnd": 0.8529
+    },
+    {
+      "name": "page_scoped",
+      "count": 15,
+      "retrieval": 1,
+      "content": 0.9333,
+      "citations": 0.9333,
+      "endToEnd": 0.8667
+    },
+    {
+      "name": "unanswerable",
+      "count": 10,
+      "retrieval": 0.9,
+      "content": 0.9,
+      "citations": 0.9,
+      "endToEnd": 0.9
+    }
+  ],
+  "byDocument": [
+    {
+      "name": "cisa-zero-trust-maturity-model-2.0",
+      "count": 11,
+      "retrieval": 1,
+      "content": 1,
+      "citations": 0.8182,
+      "endToEnd": 0.8182
+    },
+    {
+      "name": "federal-reserve-economic-well-being-2024",
+      "count": 12,
+      "retrieval": 0.9167,
+      "content": 0.8333,
+      "citations": 0.9167,
+      "endToEnd": 0.8333
+    },
+    {
+      "name": "nist-ai-rmf-1.0",
+      "count": 12,
+      "retrieval": 1,
+      "content": 1,
+      "citations": 0.9167,
+      "endToEnd": 0.9167
+    },
+    {
+      "name": "nist-csf-2.0",
+      "count": 12,
+      "retrieval": 1,
+      "content": 1,
+      "citations": 1,
+      "endToEnd": 1
+    },
+    {
+      "name": "omb-circular-a-123-2026",
+      "count": 12,
+      "retrieval": 1,
+      "content": 0.75,
+      "citations": 1,
+      "endToEnd": 0.75
+    }
+  ],
+  "byDifficulty": [
+    {
+      "name": "easy",
+      "count": 28,
+      "retrieval": 1,
+      "content": 0.9643,
+      "citations": 1,
+      "endToEnd": 0.9643
+    },
+    {
+      "name": "medium",
+      "count": 27,
+      "retrieval": 0.963,
+      "content": 0.8889,
+      "citations": 0.8889,
+      "endToEnd": 0.8148
+    },
+    {
+      "name": "hard",
+      "count": 4,
+      "retrieval": 1,
+      "content": 0.75,
+      "citations": 0.75,
+      "endToEnd": 0.5
+    }
+  ],
+  "economics": {
+    "totalCostUsd": 0.7893,
+    "perCaseMeanUsd": 0.01331,
+    "perCaseP95Usd": 0.02043,
+    "totalTokens": 2347377,
+    "freshInputTokens": 1236804,
+    "cachedInputTokens": 889299,
+    "reasoningTokens": 127493,
+    "outputTokens": 93781,
+    "totalCalls": 355,
+    "stages": [
+      {
+        "key": "embedding",
+        "label": "Query embedding",
+        "calls": 44,
+        "costUsd": null,
+        "inputTokens": 1142,
+        "cachedTokens": 0,
+        "reasoningTokens": 0,
+        "outputTokens": 0
+      },
+      {
+        "key": "answer",
+        "label": "Answer generation",
+        "calls": 59,
+        "costUsd": 0.34109,
+        "inputTokens": 371885,
+        "cachedTokens": 48384,
+        "reasoningTokens": 2499,
+        "outputTokens": 13816
+      },
+      {
+        "key": "judge_retrieval",
+        "label": "Judge: retrieval",
+        "calls": 118,
+        "costUsd": 0.2589,
+        "inputTokens": 845218,
+        "cachedTokens": 428977,
+        "reasoningTokens": 78246,
+        "outputTokens": 139229
+      },
+      {
+        "key": "judge_answer",
+        "label": "Judge: answer",
+        "calls": 118,
+        "costUsd": 0.15467,
+        "inputTokens": 846870,
+        "cachedTokens": 411938,
+        "reasoningTokens": 33176,
+        "outputTokens": 49539
+      },
+      {
+        "key": "adjudication",
+        "label": "Adjudication",
+        "calls": 7,
+        "costUsd": 0.0307,
+        "inputTokens": 54571,
+        "cachedTokens": 0,
+        "reasoningTokens": 12468,
+        "outputTokens": 16487
+      }
+    ]
+  },
+  "latency": {
+    "retrieval": {
+      "p50": 213,
+      "p95": 530
+    },
+    "generation": {
+      "p50": 1237,
+      "p95": 2260
+    },
+    "judging": {
+      "p50": 42030,
+      "p95": 99302
+    }
+  }
+}
