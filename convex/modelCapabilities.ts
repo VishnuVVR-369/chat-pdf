@@ -23,9 +23,17 @@ export function modelSupportsReasoningEffort(model: string): boolean {
   return REASONING_MODEL_PATTERN.test(model.trim());
 }
 
-// Effort levels we use, ascending. "none" is intentionally excluded: it disables
-// reasoning entirely, which can degrade the verbatim-quote citation quality.
-const REASONING_EFFORT_ORDER = ["minimal", "low", "medium", "high"] as const;
+// All effort levels used across supported reasoning-model families, ascending.
+// Individual families expose only a subset, which is enforced below.
+const REASONING_EFFORT_ORDER = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORT_ORDER)[number];
 
 // `reasoning_effort` support differs by model family, and sending an unsupported
@@ -35,6 +43,9 @@ function supportedReasoningEfforts(model: string): ReasoningEffort[] {
   const m = model.trim().toLowerCase();
   // *-pro models only accept "high".
   if (m.includes("-pro")) return ["high"];
+  // GPT-5.6 replaces "minimal" with "none" and adds two higher effort levels.
+  if (m.startsWith("gpt-5.6"))
+    return ["none", "low", "medium", "high", "xhigh", "max"];
   // o-series and the gpt-5.1 family don't accept "minimal".
   if (/^o\d/.test(m) || m.startsWith("gpt-5.1"))
     return ["low", "medium", "high"];
@@ -77,9 +88,9 @@ export function resolveChatReasoningEffort(
 }
 
 /**
- * Fastest valid `reasoning_effort` for the lightweight routing classification, or
- * `undefined` for non-reasoning models. "minimal" where supported; clamps up on
- * families that don't (e.g. "low" on gpt-5.1/o-series, "high" on *-pro).
+ * Fastest valid nonzero `reasoning_effort` for lightweight routing, or
+ * `undefined` for non-reasoning models. "minimal" where supported; clamps up to
+ * "low" on GPT-5.6, GPT-5.1, and o-series, or "high" on *-pro models.
  */
 export function resolveRoutingReasoningEffort(
   model: string,

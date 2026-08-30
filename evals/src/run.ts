@@ -90,7 +90,10 @@ type RunOptions = {
   concurrency?: number;
 };
 
-const DEFAULT_CONCURRENCY = 4;
+// Answer and judge calls share the Luna TPM budget. One case at a time keeps a
+// default-tier project below that ceiling; higher-tier accounts can still opt in
+// to more parallelism with `--concurrency`.
+const DEFAULT_CONCURRENCY = 2;
 
 /**
  * Runs tasks with bounded concurrency, preserving input order in the output.

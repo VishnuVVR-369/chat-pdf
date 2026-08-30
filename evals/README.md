@@ -9,7 +9,10 @@ conversations or messages. Corpus documents use the isolated synthetic owner
 
 - The normal project environment variables for Convex, OpenAI, and Mistral.
 - `CONVEX_DEPLOYMENT` must point to a development deployment.
-- `EVAL_JUDGE_MODEL` should be stronger than `OPENAI_CHAT_MODEL`.
+- `EVAL_JUDGE_MODEL` grades the answers. It currently matches
+  `OPENAI_CHAT_MODEL`, but judging runs at high reasoning effort while answering
+  runs at the product default, so the grader still gets more thinking budget
+  than the system under test.
 - The five committed PDFs must match `corpus/manifest.json`.
 
 The harness refuses production by default. Its local CLI invokes internal
@@ -32,10 +35,10 @@ It reuses documents with matching filenames and SHA-256 checksums.
 pnpm eval:dataset
 ```
 
-The author model proposes 30 single-turn, 15 page-scoped, and 15 unanswerable
-cases. A separate verification pass checks exact evidence. Unanswerable cases
-are checked against every OCR page in bounded batches. The resulting versioned
-JSONL dataset and generation log are committed.
+The current v1.1 dataset contains 35 single-turn, 15 page-scoped, and 10
+unanswerable cases. A separate verification pass checks exact evidence.
+Unanswerable cases are checked against every OCR page in bounded batches. The
+resulting versioned JSONL dataset and generation log are committed.
 
 ## 3. Run the evaluation
 
@@ -43,8 +46,12 @@ JSONL dataset and generation log are committed.
 pnpm eval:run
 pnpm eval:run -- --limit 5
 pnpm eval:run -- --case nist-ai-rmf-1.0-st-01
+pnpm eval:run -- --concurrency 2
 pnpm eval:run -- --resume <run-id>
 ```
+
+Runs default to concurrency 1 because answer and judge calls share the Luna TPM
+budget. Accounts with more capacity can raise it explicitly.
 
 Every new run creates an immutable directory under `evals/runs/` containing:
 
@@ -59,9 +66,8 @@ Pass/fail disagreements or score differences above one point trigger a third
 adjudication call. Each fresh run also checks supported and contradicted anchor
 answers before evaluating the dataset.
 
-Reports include token counts and an estimated standard API cost for the current
-GPT-5.4 and GPT-5.4 mini models. The estimate excludes cached-input discounts,
-embedding, OCR, and Convex charges.
+Reports include token counts and an estimated standard API cost for GPT-5.6
+Luna. The estimate excludes embedding, OCR, and Convex charges.
 
 Run directories are intentionally ignored by Git. Copy a run elsewhere if it
 must be preserved or shared.

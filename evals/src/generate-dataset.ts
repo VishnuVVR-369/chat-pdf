@@ -415,9 +415,9 @@ export async function generateDataset() {
   const manifest = readCorpusManifest();
   const authorModel = requiredEnv(
     "EVAL_AUTHOR_MODEL",
-    requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.4"),
+    requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.6-luna"),
   );
-  const verifierModel = requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.4");
+  const verifierModel = requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.6-luna");
   const pagesByDocument = new Map<string, CorpusPage[]>();
 
   for (const document of manifest.documents) {

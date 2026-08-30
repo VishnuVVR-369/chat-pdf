@@ -487,12 +487,12 @@ export const referenceGroup: DocsGroup = {
                 {
                   name: "OPENAI_CHAT_MODEL",
                   purpose:
-                    "Model for routing, per-page summaries, document summaries, and grounded answer generation. Default is gpt-5.4-mini.",
+                    "Model for routing, per-page summaries, document summaries, and grounded answer generation. Default is gpt-5.6-luna.",
                 },
                 {
                   name: "OPENAI_CHAT_REASONING_EFFORT",
                   purpose:
-                    "Reasoning effort for chat answers on reasoning models (minimal | low | medium | high). Lower effort makes tokens start streaming sooner; clamped to what the model supports. Default is low.",
+                    "Reasoning effort for chat answers on reasoning models (none | minimal | low | medium | high | xhigh | max). Lower effort makes tokens start streaming sooner; clamped to what the model supports. GPT-5.6 does not accept minimal, so it is clamped to low. Default is low.",
                 },
               ]}
             />

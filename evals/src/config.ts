@@ -152,12 +152,12 @@ export function getRunConfig(
     datasetVersion: datasetMetadata.version ?? "unknown",
     corpusVersion: corpus.version,
     convexDeployment: requiredEnv("CONVEX_DEPLOYMENT"),
-    answerModel: requiredEnv("OPENAI_CHAT_MODEL", "gpt-5.4-mini"),
+    answerModel: requiredEnv("OPENAI_CHAT_MODEL", "gpt-5.6-luna"),
     embeddingModel: requiredEnv(
       "OPENAI_EMBEDDING_MODEL",
       "text-embedding-3-small",
     ),
-    judgeModel: requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.4"),
+    judgeModel: requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.6-luna"),
     judgePasses: Number(process.env.EVAL_JUDGE_PASSES ?? "2"),
     caseCount,
   };

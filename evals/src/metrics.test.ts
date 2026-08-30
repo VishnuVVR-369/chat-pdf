@@ -27,7 +27,7 @@ const usage = (prompt: number, completion: number, cached = 0, reasoning = 0) =>
 
 const call = (over: Partial<ModelCall> = {}): ModelCall => ({
   stage: "answer",
-  model: "gpt-5.4-mini",
+  model: "gpt-5.6-luna",
   usage: usage(100, 50),
   latencyMs: 100,
   attempts: 1,
@@ -67,7 +67,7 @@ function result(overrides: Overrides = {}): EvaluationResult {
     durationMs: 1_000,
     wallClockMs: 1_000,
     modelCalls: overrides.modelCalls ?? [
-      call({ stage: "answer", model: "gpt-5.4-mini", usage: usage(5, 5) }),
+      call({ stage: "answer", model: "gpt-5.6-luna", usage: usage(5, 5) }),
     ],
     evaluationCase: {
       id,
@@ -322,7 +322,7 @@ describe("summarizeResults", () => {
       wallClockMs: 500,
       // A case that died while judging still paid for its answer call.
       modelCalls: [
-        call({ stage: "answer", model: "gpt-5.4-mini", usage: usage(80, 20) }),
+        call({ stage: "answer", model: "gpt-5.6-luna", usage: usage(80, 20) }),
       ],
     };
     const summary = summarizeResults([result({ id: "ok" }), errored]);
@@ -347,10 +347,11 @@ describe("cost model", () => {
   });
 
   test("falls back to the input rate when a model has no cached rate", () => {
-    // gpt-5.4-mini has cachedInput: null, so cached tokens bill at $0.75/M.
-    const cost = costOfUsage("gpt-5.4-mini", usage(1_000_000, 0, 500_000));
+    // Historical gpt-5.4 pricing has cachedInput: null, so cached tokens use
+    // the normal $2.50/M input rate.
+    const cost = costOfUsage("gpt-5.4", usage(1_000_000, 0, 500_000));
 
-    expect(cost).toBeCloseTo(0.75, 6);
+    expect(cost).toBeCloseTo(2.5, 6);
   });
 
   test("returns null for an unpriced model instead of a misleading zero", () => {
@@ -396,7 +397,7 @@ describe("percentiles and rollups", () => {
   test("rollup separates stages and flags unpriced ones", () => {
     const rollups = rollupCalls([
       call({ stage: "embedding", model: "text-embedding-3-small" }),
-      call({ stage: "answer", model: "gpt-5.4-mini" }),
+      call({ stage: "answer", model: "gpt-5.6-luna" }),
       call({ stage: "judge_answer", model: "gpt-5.6-luna" }),
     ]);
 
@@ -445,14 +446,14 @@ describe("run economics", () => {
         id: "one",
         modelCalls: [
           call({ stage: "embedding", model: "text-embedding-3-small" }),
-          call({ stage: "answer", model: "gpt-5.4-mini" }),
+          call({ stage: "answer", model: "gpt-5.4" }),
           call({ stage: "judge_answer", model: "gpt-5.6-luna" }),
         ],
       }),
     ]);
 
     expect(summary.unpricedModels).toEqual(["text-embedding-3-small"]);
-    expect(summary.unverifiedModels).toEqual(["gpt-5.4-mini"]);
+    expect(summary.unverifiedModels).toEqual(["gpt-5.4"]);
   });
 
   test("counts retries and flags calls whose usage the API never reported", () => {

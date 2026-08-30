@@ -117,9 +117,9 @@ and set `CLERK_JWT_ISSUER_DOMAIN` to the template's issuer URL. This matches
 `getToken({ template: "convex" })` call used by the chat stream. Without it,
 authenticated Convex queries and the `/api/chat/stream` endpoint return 401.
 
-> `OPENAI_CHAT_MODEL` defaults to a GPT-5-class model, which only accepts the
-> default sampling `temperature`. The code automatically omits `temperature` for
-> `gpt-5*`/`o*` models; older models (e.g. `gpt-4.1-mini`) still receive it.
+> `OPENAI_CHAT_MODEL` defaults to `gpt-5.6-luna`. GPT-5 and o-series models only
+> accept their default sampling `temperature`, so the code automatically omits
+> that parameter for them; older models (e.g. `gpt-4.1-mini`) still receive it.
 
 ## Local Development
 

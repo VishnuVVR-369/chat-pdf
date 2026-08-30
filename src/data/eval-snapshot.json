@@ -1,17 +1,17 @@
 {
-  "generatedAt": "2026-08-29T19:45:26.856Z",
+  "generatedAt": "2026-08-30T11:12:13.808Z",
   "run": {
-    "id": "2026-08-29T19-01-25-162Z-effb0ab",
-    "completedAt": "2026-08-29T19:12:05.374Z",
+    "id": "2026-08-30T10-49-34-518Z-5580262",
+    "completedAt": "2026-08-30T11:11:57.136Z",
     "datasetVersion": "1.1.0",
     "corpusVersion": "1.0.0",
-    "answerModel": "gpt-5.4-mini",
+    "answerModel": "gpt-5.6-luna",
     "judgeModel": "gpt-5.6-luna",
     "embeddingModel": "text-embedding-3-small",
     "judgePasses": 2,
     "casesEvaluated": 59,
     "casesTotal": 60,
-    "wallClockMs": 640211
+    "wallClockMs": 1342617
   },
   "corpus": {
     "documentCount": 5,
@@ -62,10 +62,10 @@
     {
       "label": "Content",
       "blurb": "The answer is correct, complete, and faithful to the retrieved sources.",
-      "value": 0.9153,
-      "low": 0.8165,
-      "high": 0.9633,
-      "passed": 54,
+      "value": 0.9661,
+      "low": 0.8846,
+      "high": 0.9907,
+      "passed": 57,
       "total": 59
     },
     {
@@ -80,19 +80,19 @@
     {
       "label": "Behaviour",
       "blurb": "The system abstains when it should and respects page scoping.",
-      "value": 0.9831,
-      "low": 0.91,
-      "high": 0.997,
-      "passed": 58,
+      "value": 0.9661,
+      "low": 0.8846,
+      "high": 0.9907,
+      "passed": 57,
       "total": 59
     },
     {
       "label": "End to end",
       "blurb": "All four gates passed on the same question.",
-      "value": 0.8644,
-      "low": 0.7546,
-      "high": 0.9297,
-      "passed": 51,
+      "value": 0.9153,
+      "low": 0.8165,
+      "high": 0.9633,
+      "passed": 54,
       "total": 59
     }
   ],
@@ -107,13 +107,7 @@
       "key": "abstention_failure",
       "label": "Abstention failure",
       "description": "Answered a question the document cannot support, or refused an answerable one.",
-      "count": 1
-    },
-    {
-      "key": "content_failure",
-      "label": "Content failure",
-      "description": "Grounded in the sources but incorrect, incomplete, or off-question.",
-      "count": 4
+      "count": 2
     },
     {
       "key": "citation_failure",
@@ -125,70 +119,70 @@
   "dimensions": [
     {
       "label": "Groundedness",
-      "value": 3.97,
+      "value": 3.89,
       "lowerIsBetter": false
     },
     {
       "label": "Answer correctness",
-      "value": 3.91,
+      "value": 3.89,
       "lowerIsBetter": false
     },
     {
       "label": "Citation correctness",
-      "value": 3.89,
+      "value": 3.95,
       "lowerIsBetter": false
     },
     {
       "label": "Retrieval sufficiency",
-      "value": 3.89,
+      "value": 3.86,
       "lowerIsBetter": false
     },
     {
       "label": "Evidence coverage",
-      "value": 3.88,
+      "value": 3.86,
       "lowerIsBetter": false
     },
     {
       "label": "Completeness",
-      "value": 3.67,
+      "value": 3.81,
       "lowerIsBetter": false
     },
     {
       "label": "Context noise",
-      "value": 2.37,
+      "value": 2.4,
       "lowerIsBetter": true
     }
   ],
   "citations": {
-    "emitted": 116,
-    "validated": 106,
-    "validationRate": 0.9138,
-    "casesWithCitations": 0.8814
+    "emitted": 110,
+    "validated": 100,
+    "validationRate": 0.9091,
+    "casesWithCitations": 0.9661
   },
   "byType": [
     {
       "name": "single_turn",
       "count": 34,
       "retrieval": 1,
-      "content": 0.9118,
-      "citations": 0.9412,
-      "endToEnd": 0.8529
+      "content": 1,
+      "citations": 0.9118,
+      "endToEnd": 0.9118
     },
     {
       "name": "page_scoped",
       "count": 15,
       "retrieval": 1,
-      "content": 0.9333,
-      "citations": 0.9333,
-      "endToEnd": 0.8667
+      "content": 1,
+      "citations": 1,
+      "endToEnd": 1
     },
     {
       "name": "unanswerable",
       "count": 10,
       "retrieval": 0.9,
-      "content": 0.9,
+      "content": 0.8,
       "citations": 0.9,
-      "endToEnd": 0.9
+      "endToEnd": 0.8
     }
   ],
   "byDocument": [
@@ -196,7 +190,7 @@
       "name": "cisa-zero-trust-maturity-model-2.0",
       "count": 11,
       "retrieval": 1,
-      "content": 1,
+      "content": 0.9091,
       "citations": 0.8182,
       "endToEnd": 0.8182
     },
@@ -204,17 +198,17 @@
       "name": "federal-reserve-economic-well-being-2024",
       "count": 12,
       "retrieval": 0.9167,
-      "content": 0.8333,
-      "citations": 0.9167,
-      "endToEnd": 0.8333
+      "content": 0.9167,
+      "citations": 1,
+      "endToEnd": 0.9167
     },
     {
       "name": "nist-ai-rmf-1.0",
       "count": 12,
       "retrieval": 1,
       "content": 1,
-      "citations": 0.9167,
-      "endToEnd": 0.9167
+      "citations": 0.8333,
+      "endToEnd": 0.8333
     },
     {
       "name": "nist-csf-2.0",
@@ -228,9 +222,9 @@
       "name": "omb-circular-a-123-2026",
       "count": 12,
       "retrieval": 1,
-      "content": 0.75,
+      "content": 1,
       "citations": 1,
-      "endToEnd": 0.75
+      "endToEnd": 1
     }
   ],
   "byDifficulty": [
@@ -239,36 +233,36 @@
       "count": 28,
       "retrieval": 1,
       "content": 0.9643,
-      "citations": 1,
+      "citations": 0.9643,
       "endToEnd": 0.9643
     },
     {
       "name": "medium",
       "count": 27,
       "retrieval": 0.963,
-      "content": 0.8889,
-      "citations": 0.8889,
-      "endToEnd": 0.8148
+      "content": 0.963,
+      "citations": 0.963,
+      "endToEnd": 0.9259
     },
     {
       "name": "hard",
       "count": 4,
       "retrieval": 1,
-      "content": 0.75,
-      "citations": 0.75,
+      "content": 1,
+      "citations": 0.5,
       "endToEnd": 0.5
     }
   ],
   "economics": {
-    "totalCostUsd": 0.7893,
-    "perCaseMeanUsd": 0.01331,
-    "perCaseP95Usd": 0.02043,
-    "totalTokens": 2347377,
-    "freshInputTokens": 1236804,
-    "cachedInputTokens": 889299,
-    "reasoningTokens": 127493,
-    "outputTokens": 93781,
-    "totalCalls": 355,
+    "totalCostUsd": 0.5261,
+    "perCaseMeanUsd": 0.00886,
+    "perCaseP95Usd": 0.01826,
+    "totalTokens": 2337835,
+    "freshInputTokens": 1217616,
+    "cachedInputTokens": 899560,
+    "reasoningTokens": 127667,
+    "outputTokens": 92992,
+    "totalCalls": 353,
     "stages": [
       {
         "key": "embedding",
@@ -284,56 +278,56 @@
         "key": "answer",
         "label": "Answer generation",
         "calls": 59,
-        "costUsd": 0.34109,
+        "costUsd": 0.07809,
         "inputTokens": 371885,
-        "cachedTokens": 48384,
-        "reasoningTokens": 2499,
-        "outputTokens": 13816
+        "cachedTokens": 57935,
+        "reasoningTokens": 540,
+        "outputTokens": 11788
       },
       {
         "key": "judge_retrieval",
         "label": "Judge: retrieval",
         "calls": 118,
-        "costUsd": 0.2589,
-        "inputTokens": 845218,
-        "cachedTokens": 428977,
-        "reasoningTokens": 78246,
-        "outputTokens": 139229
+        "costUsd": 0.26236,
+        "inputTokens": 843494,
+        "cachedTokens": 421570,
+        "reasoningTokens": 80230,
+        "outputTokens": 141288
       },
       {
         "key": "judge_answer",
         "label": "Judge: answer",
         "calls": 118,
-        "costUsd": 0.15467,
-        "inputTokens": 846870,
-        "cachedTokens": 411938,
-        "reasoningTokens": 33176,
-        "outputTokens": 49539
+        "costUsd": 0.15111,
+        "inputTokens": 845146,
+        "cachedTokens": 420055,
+        "reasoningTokens": 31820,
+        "outputTokens": 48079
       },
       {
         "key": "adjudication",
         "label": "Adjudication",
-        "calls": 7,
-        "costUsd": 0.0307,
-        "inputTokens": 54571,
+        "calls": 5,
+        "costUsd": 0.0309,
+        "inputTokens": 49079,
         "cachedTokens": 0,
-        "reasoningTokens": 12468,
-        "outputTokens": 16487
+        "reasoningTokens": 14290,
+        "outputTokens": 17567
       }
     ]
   },
   "latency": {
     "retrieval": {
-      "p50": 213,
-      "p95": 530
+      "p50": 194,
+      "p95": 459
     },
     "generation": {
-      "p50": 1237,
-      "p95": 2260
+      "p50": 1621,
+      "p95": 3346
     },
     "judging": {
-      "p50": 42030,
-      "p95": 99302
+      "p50": 26305,
+      "p95": 69787
     }
   }
 }

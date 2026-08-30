@@ -280,7 +280,7 @@ export async function judgeEvaluationCase(
   evaluationCase: EvaluationCase,
   trace: EvaluationTrace,
 ): Promise<FinalJudgment> {
-  const model = requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.4");
+  const model = requiredEnv("EVAL_JUDGE_MODEL", "gpt-5.6-luna");
   const passCount = Math.max(1, Number(process.env.EVAL_JUDGE_PASSES ?? "2"));
   const passes: JudgePass[] = [];
   for (let index = 0; index < passCount; index += 1) {

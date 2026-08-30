@@ -25,7 +25,7 @@ export function loadOpenAiEmbeddingConfig() {
 export function loadOpenAiChatConfig() {
   return {
     apiKey: getRequiredEnv("OPENAI_API_KEY"),
-    chatModel: getRequiredEnv("OPENAI_CHAT_MODEL", "gpt-5.4-mini"),
+    chatModel: getRequiredEnv("OPENAI_CHAT_MODEL", "gpt-5.6-luna"),
   };
 }
 

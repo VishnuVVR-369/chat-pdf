@@ -29,12 +29,6 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
     output: 1.2,
     verified: true,
   },
-  "gpt-5.4-mini": {
-    input: 0.75,
-    cachedInput: null,
-    output: 4.5,
-    verified: false,
-  },
   "gpt-5.4": { input: 2.5, cachedInput: null, output: 15, verified: false },
   // text-embedding-3-small is deliberately absent: no confirmed rate, so its
   // tokens are counted and reported but never turned into a dollar figure.

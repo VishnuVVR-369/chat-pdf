@@ -26,7 +26,7 @@ export type ChatCompletionUsage = {
 export function getChatConfig() {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-  const model = process.env.OPENAI_CHAT_MODEL ?? "gpt-5.4-mini";
+  const model = process.env.OPENAI_CHAT_MODEL ?? "gpt-5.6-luna";
   return { apiKey, model };
 }
 

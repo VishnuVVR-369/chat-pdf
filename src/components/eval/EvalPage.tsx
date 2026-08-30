@@ -516,7 +516,7 @@ export function EvalPage() {
             {
               step: "04",
               title: "Independent judging",
-              body: `${run.judgePasses} independent gradings by a stronger model, with a third adjudication pass whenever they disagree.`,
+              body: `${run.judgePasses} independent gradings at high reasoning effort - well above what answering uses - with a third adjudication pass whenever they disagree.`,
             },
           ].map((item) => (
             <li
