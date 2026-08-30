@@ -3,6 +3,8 @@ import type { Id } from "./_generated/dataModel";
 import {
   buildChunkSystemPrompt,
   buildValidatedChunkCitations,
+  createAnswerExtractor,
+  parseStructuredAssistantResponse,
   type RankedChunk,
 } from "./chatHelpers";
 
@@ -62,5 +64,55 @@ describe("buildChunkSystemPrompt", () => {
     );
 
     expect(citations).toEqual([]);
+  });
+});
+
+describe("createAnswerExtractor", () => {
+  test("buffers the whole structured response so citations survive", () => {
+    const extractor = createAnswerExtractor();
+    const deltas = [
+      '{"answer":"The Agreement renews ',
+      'automatically.","cit',
+      'ations":[{"sourceId":"S1","quote":"renews automatically"}]}',
+    ];
+    const emitted = deltas.map((delta) => extractor.feed(delta)).join("");
+
+    expect(emitted).toBe("The Agreement renews automatically.");
+    expect(extractor.complete).toBe(true);
+
+    const parsed = parseStructuredAssistantResponse(extractor.rawBuffer);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.citations).toEqual([
+      { sourceId: "S1", quote: "renews automatically" },
+    ]);
+  });
+
+  test("emits the answer once and never leaks citation text into the stream", () => {
+    const extractor = createAnswerExtractor();
+    const emitted = ['{"answer":"Done."', ',"citations":[]}']
+      .map((delta) => extractor.feed(delta))
+      .join("");
+
+    expect(emitted).toBe("Done.");
+    expect(JSON.parse(extractor.rawBuffer)).toEqual({
+      answer: "Done.",
+      citations: [],
+    });
+  });
+
+  test("decodes escapes split across delta boundaries", () => {
+    const extractor = createAnswerExtractor();
+    const emitted = [
+      '{"answer":"He said \\',
+      '"hi\\" to me."',
+      ',"citations":[]}',
+    ]
+      .map((delta) => extractor.feed(delta))
+      .join("");
+
+    expect(emitted).toBe('He said "hi" to me.');
+    expect(parseStructuredAssistantResponse(extractor.rawBuffer)?.answer).toBe(
+      'He said "hi" to me.',
+    );
   });
 });

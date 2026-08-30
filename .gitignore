@@ -51,3 +51,6 @@ docs/
 !src/lib/docs/
 !src/lib/docs/**
 scripts/
+
+# local evaluation run artifacts
+/evals/runs/

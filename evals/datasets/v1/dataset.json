@@ -1,0 +1,14 @@
+{
+  "version": "1.0.0",
+  "status": "ready",
+  "generatedAt": "2026-08-29T16:20:12.917Z",
+  "caseCount": 60,
+  "caseMix": {
+    "single_turn": 30,
+    "page_scoped": 15,
+    "unanswerable": 15
+  },
+  "authorModel": "gpt-5.4",
+  "verifierModel": "gpt-5.4",
+  "casesFile": "cases.jsonl"
+}

@@ -1,0 +1,83 @@
+{
+  "version": "1.1.0",
+  "status": "ready",
+  "generatedAt": "2026-08-29T16:20:12.917Z",
+  "relabeledAt": "2026-08-29T18:54:22.557225Z",
+  "derivedFrom": "v1 (1.0.0)",
+  "caseCount": 60,
+  "caseMix": {
+    "single_turn": 35,
+    "page_scoped": 15,
+    "unanswerable": 10
+  },
+  "authorModel": "gpt-5.4",
+  "verifierModel": "gpt-5.4",
+  "casesFile": "cases.jsonl",
+  "changelog": [
+    {
+      "caseId": "cisa-zero-trust-maturity-model-2.0-ua-01",
+      "before": {
+        "type": "unanswerable",
+        "answerability": "unanswerable",
+        "difficulty": "easy"
+      },
+      "after": {
+        "type": "single_turn",
+        "answerability": "answerable",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "caseId": "cisa-zero-trust-maturity-model-2.0-ua-03",
+      "before": {
+        "type": "unanswerable",
+        "answerability": "unanswerable",
+        "difficulty": "easy"
+      },
+      "after": {
+        "type": "single_turn",
+        "answerability": "answerable",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "caseId": "nist-ai-rmf-1.0-ua-02",
+      "before": {
+        "type": "unanswerable",
+        "answerability": "unanswerable",
+        "difficulty": "easy"
+      },
+      "after": {
+        "type": "single_turn",
+        "answerability": "answerable",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "caseId": "nist-ai-rmf-1.0-ua-03",
+      "before": {
+        "type": "unanswerable",
+        "answerability": "unanswerable",
+        "difficulty": "easy"
+      },
+      "after": {
+        "type": "single_turn",
+        "answerability": "answerable",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "caseId": "omb-circular-a-123-2026-ua-03",
+      "before": {
+        "type": "unanswerable",
+        "answerability": "unanswerable",
+        "difficulty": "hard"
+      },
+      "after": {
+        "type": "single_turn",
+        "answerability": "answerable",
+        "difficulty": "medium"
+      }
+    }
+  ]
+}

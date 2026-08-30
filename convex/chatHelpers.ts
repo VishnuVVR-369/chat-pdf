@@ -161,6 +161,25 @@ export type RankedChunk = RetrievedChunk & {
   sourceId: string;
 };
 
+export type RetrievalCandidate = {
+  chunkId: Id<"documentChunks">;
+  rank: number;
+  score?: number;
+};
+
+export type ChunkRetrievalTrace = {
+  query: string;
+  pageNumber?: number;
+  vectorCandidates: RetrievalCandidate[];
+  lexicalCandidates: RetrievalCandidate[];
+  selectedChunks: RankedChunk[];
+  neighborChunks: RetrievedChunk[];
+  finalChunks: RankedChunk[];
+  /** Absent for page-scoped retrieval, which never embeds the query. */
+  embedding: EmbeddingCall | null;
+  latencyMs: number;
+};
+
 export type StructuredAssistantResponse = {
   answer: string;
   citations: Array<{ sourceId: string; quote: string }>;
@@ -955,13 +974,26 @@ export async function routeChatQuery(args: {
   }
 }
 
-export async function embedQuery(
+export type EmbeddingCall = {
+  model: string;
+  promptTokens: number;
+  totalTokens: number;
+  latencyMs: number;
+};
+
+/**
+ * Embeds a query and reports what the call cost. `embedQuery` keeps the plain
+ * vector signature used by the chat path; the evaluation harness uses the
+ * traced variant so query embeddings appear in the run's cost ledger.
+ */
+export async function embedQueryTraced(
   query: string,
   signal?: AbortSignal,
-): Promise<number[]> {
+): Promise<{ values: number[]; call: EmbeddingCall }> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
   const model = process.env.OPENAI_EMBEDDING_MODEL ?? "text-embedding-3-small";
+  const startedAt = Date.now();
 
   const res = await fetch("https://api.openai.com/v1/embeddings", {
     method: "POST",
@@ -981,11 +1013,28 @@ export async function embedQuery(
 
   const data = (await res.json()) as {
     data: Array<{ embedding: number[] }>;
+    usage?: { prompt_tokens?: number; total_tokens?: number } | null;
   };
   const values = data.data[0]?.embedding;
   if (!values || values.length === 0)
     throw new Error("Failed to embed the query.");
-  return values;
+
+  return {
+    values,
+    call: {
+      model,
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+      totalTokens: data.usage?.total_tokens ?? 0,
+      latencyMs: Date.now() - startedAt,
+    },
+  };
+}
+
+export async function embedQuery(
+  query: string,
+  signal?: AbortSignal,
+): Promise<number[]> {
+  return (await embedQueryTraced(query, signal)).values;
 }
 
 export async function getChunkRetrievalContext(
@@ -998,8 +1047,24 @@ export async function getChunkRetrievalContext(
     signal?: AbortSignal;
   },
 ) {
+  const trace = await getChunkRetrievalTrace(ctx, args);
+  return trace.finalChunks;
+}
+
+export async function getChunkRetrievalTrace(
+  ctx: ActionCtx,
+  args: {
+    documentId: Id<"documents">;
+    ownerTokenIdentifier: string;
+    query: string;
+    pageNumber?: number;
+    signal?: AbortSignal;
+  },
+): Promise<ChunkRetrievalTrace> {
+  const startedAt = Date.now();
+
   if (args.pageNumber !== undefined) {
-    const pageChunks = await ctx.runQuery(
+    const pageChunks: RetrievedChunk[] = await ctx.runQuery(
       internal.chatData.getDocumentChunksForPage,
       {
         documentId: args.documentId,
@@ -1008,15 +1073,27 @@ export async function getChunkRetrievalContext(
       },
     );
 
-    return pageChunks.map((chunk, index) => ({
+    const finalChunks = pageChunks.map((chunk, index) => ({
       ...chunk,
       hybridScore: 1,
       sourceId: `S${index + 1}`,
     }));
+
+    return {
+      query: args.query,
+      pageNumber: args.pageNumber,
+      vectorCandidates: [],
+      lexicalCandidates: [],
+      selectedChunks: finalChunks,
+      neighborChunks: [],
+      finalChunks,
+      embedding: null,
+      latencyMs: Date.now() - startedAt,
+    };
   }
 
   const ownerDocumentKey = `${args.ownerTokenIdentifier}:${args.documentId}`;
-  const lexicalSearchPromise = ctx.runQuery(
+  const lexicalSearchPromise: Promise<Id<"documentChunks">[]> = ctx.runQuery(
     internal.chatData.searchDocumentChunks,
     {
       ownerDocumentKey,
@@ -1025,26 +1102,48 @@ export async function getChunkRetrievalContext(
     },
   );
 
-  const queryVector = await embedQuery(args.query, args.signal);
-  const vectorResults = await ctx.vectorSearch(
-    "documentChunks",
-    "by_embedding",
-    {
-      vector: queryVector,
-      limit: HYBRID_VECTOR_LIMIT,
-      filter: (q) => q.eq("documentId", args.documentId),
-    },
-  );
-  const lexicalIds = await lexicalSearchPromise;
+  const embedded = await embedQueryTraced(args.query, args.signal);
+  const queryVector: number[] = embedded.values;
+  const embedding: EmbeddingCall = embedded.call;
+  const vectorResults: Array<{
+    _id: Id<"documentChunks">;
+    _score: number;
+  }> = await ctx.vectorSearch("documentChunks", "by_embedding", {
+    vector: queryVector,
+    limit: HYBRID_VECTOR_LIMIT,
+    filter: (q) => q.eq("documentId", args.documentId),
+  });
+  const lexicalIds: Id<"documentChunks">[] = await lexicalSearchPromise;
   const candidateIds = Array.from(
     new Set([...vectorResults.map((r) => r._id), ...lexicalIds]),
   );
 
-  if (candidateIds.length === 0) return [];
+  if (candidateIds.length === 0) {
+    return {
+      query: args.query,
+      vectorCandidates: vectorResults.map((result, index) => ({
+        chunkId: result._id,
+        rank: index + 1,
+        score: result._score,
+      })),
+      lexicalCandidates: lexicalIds.map((chunkId, index) => ({
+        chunkId,
+        rank: index + 1,
+      })),
+      selectedChunks: [],
+      neighborChunks: [],
+      finalChunks: [],
+      embedding,
+      latencyMs: Date.now() - startedAt,
+    };
+  }
 
-  const chunks = await ctx.runQuery(internal.chatData.getDocumentChunks, {
-    chunkIds: candidateIds,
-  });
+  const chunks: RetrievedChunk[] = await ctx.runQuery(
+    internal.chatData.getDocumentChunks,
+    {
+      chunkIds: candidateIds,
+    },
+  );
 
   const selectedChunks = rerankChunks(
     args.query,
@@ -1055,10 +1154,26 @@ export async function getChunkRetrievalContext(
 
   const neighborChunkIndexes = buildNeighborChunkIndexes(selectedChunks);
   if (neighborChunkIndexes.length === 0) {
-    return orderChunksForPrompt(selectedChunks);
+    return {
+      query: args.query,
+      vectorCandidates: vectorResults.map((result, index) => ({
+        chunkId: result._id,
+        rank: index + 1,
+        score: result._score,
+      })),
+      lexicalCandidates: lexicalIds.map((chunkId, index) => ({
+        chunkId,
+        rank: index + 1,
+      })),
+      selectedChunks,
+      neighborChunks: [],
+      finalChunks: orderChunksForPrompt(selectedChunks),
+      embedding,
+      latencyMs: Date.now() - startedAt,
+    };
   }
 
-  const neighborChunks = await ctx.runQuery(
+  const neighborChunks: RetrievedChunk[] = await ctx.runQuery(
     internal.chatData.getDocumentChunksByIndexes,
     {
       documentId: args.documentId,
@@ -1067,7 +1182,23 @@ export async function getChunkRetrievalContext(
     },
   );
 
-  return mergeNeighborContext(selectedChunks, neighborChunks);
+  return {
+    query: args.query,
+    vectorCandidates: vectorResults.map((result, index) => ({
+      chunkId: result._id,
+      rank: index + 1,
+      score: result._score,
+    })),
+    lexicalCandidates: lexicalIds.map((chunkId, index) => ({
+      chunkId,
+      rank: index + 1,
+    })),
+    selectedChunks,
+    neighborChunks,
+    finalChunks: mergeNeighborContext(selectedChunks, neighborChunks),
+    embedding,
+    latencyMs: Date.now() - startedAt,
+  };
 }
 
 /* ─── Streaming JSON parser ──────────────────────────────────────── */
@@ -1085,8 +1216,12 @@ export function createAnswerExtractor() {
 
   return {
     feed(delta: string): string {
-      if (isDone || !delta) return "";
+      if (!delta) return "";
+      // Always buffer, even after the answer string closes: the trailing
+      // "citations" array arrives in later deltas and the caller parses the
+      // complete JSON out of rawBuffer once the stream ends.
       rawBuffer += delta;
+      if (isDone) return "";
 
       if (answerOffset === -1) {
         const match = rawBuffer.match(/"answer"\s*:\s*"/);

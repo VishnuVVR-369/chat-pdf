@@ -2,17 +2,13 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
-  modelSupportsTemperature,
-  resolveChatReasoningEffort,
-} from "./modelCapabilities";
-import {
   MAX_HISTORY_MESSAGES,
   buildSummarySources,
   buildChunkSystemPrompt,
   buildSummarySystemPrompt,
   buildValidatedChunkCitations,
   buildValidatedSummaryCitations,
-  createAnswerExtractor,
+  type ConversationTurn,
   extractAnswerFromStructuredContent,
   getChunkRetrievalContext,
   parseStructuredAssistantResponse,
@@ -21,8 +17,8 @@ import {
   summaryAnswerFormat,
   structuredAnswerFormat,
 } from "./chatHelpers";
+import { getChatConfig, streamStructuredAnswer } from "./chatCompletion";
 import {
-  MAX_CHAT_COMPLETION_TOKENS,
   MAX_CHAT_QUESTION_CHARACTERS,
   MAX_CHAT_REQUEST_BYTES,
 } from "../src/constants/chat";
@@ -74,108 +70,6 @@ async function readLimitedRequestBody(
   } finally {
     reader.releaseLock();
   }
-}
-
-function getChatConfig() {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
-  const model = process.env.OPENAI_CHAT_MODEL ?? "gpt-5.4-mini";
-  return { apiKey, model };
-}
-
-async function streamStructuredAnswer(args: {
-  apiKey: string;
-  model: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
-  temperature: number;
-  responseFormat: typeof structuredAnswerFormat | typeof summaryAnswerFormat;
-  signal?: AbortSignal;
-  onToken: (token: string) => void;
-}) {
-  // Cap hidden reasoning so the answer starts streaming promptly instead of
-  // stalling on a long think phase (the main reason streaming looked absent).
-  const reasoningEffort = resolveChatReasoningEffort(args.model);
-
-  const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    signal: args.signal,
-    headers: {
-      Authorization: `Bearer ${args.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: args.model,
-      messages: args.messages,
-      ...(modelSupportsTemperature(args.model)
-        ? { temperature: args.temperature }
-        : {}),
-      ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-      max_completion_tokens: MAX_CHAT_COMPLETION_TOKENS,
-      response_format: args.responseFormat,
-      stream: true,
-    }),
-  });
-
-  if (!openaiRes.ok || !openaiRes.body) {
-    throw new Error(`OpenAI API error: ${openaiRes.status}`);
-  }
-
-  const extractor = createAnswerExtractor();
-  const reader = openaiRes.body.getReader();
-  const decoder = new TextDecoder();
-  let sseBuffer = "";
-  let aborted = false;
-  let finishReason: string | null = null;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      sseBuffer += decoder.decode(value, { stream: true });
-
-      const lines = sseBuffer.split("\n");
-      sseBuffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const raw = line.slice("data: ".length).trim();
-        if (raw === "[DONE]") break;
-        let parsed: {
-          choices?: Array<{
-            delta?: { content?: string };
-            finish_reason?: string | null;
-          }>;
-        };
-        try {
-          parsed = JSON.parse(raw) as typeof parsed;
-        } catch {
-          continue;
-        }
-        const choice = parsed.choices?.[0];
-        if (choice?.finish_reason) finishReason = choice.finish_reason;
-        const delta = choice?.delta?.content ?? "";
-        if (!delta) continue;
-        const decoded = extractor.feed(delta);
-        if (decoded) {
-          args.onToken(decoded);
-        }
-      }
-    }
-  } catch (err) {
-    // A client-driven stop aborts the fetch; surface partial output rather than throw.
-    if (!isAbortError(err)) throw err;
-    aborted = true;
-  }
-
-  if (!aborted && finishReason === "length") {
-    throw new Error("OpenAI completion reached its token limit");
-  }
-
-  return {
-    rawBuffer: extractor.rawBuffer,
-    complete: extractor.complete,
-    aborted,
-  };
 }
 
 export const streamChat = httpAction(async (ctx, req) => {
@@ -363,11 +257,14 @@ export const streamChat = httpAction(async (ctx, req) => {
     );
   }
 
-  const history = await ctx.runQuery(internal.chatData.getConversationHistory, {
-    conversationId,
-    ownerTokenIdentifier,
-    limit: MAX_HISTORY_MESSAGES,
-  });
+  const history: ConversationTurn[] = await ctx.runQuery(
+    internal.chatData.getConversationHistory,
+    {
+      conversationId,
+      ownerTokenIdentifier,
+      limit: MAX_HISTORY_MESSAGES,
+    },
+  );
 
   const hasChunkData = await ctx.runQuery(internal.chatData.hasDocumentChunks, {
     documentId: documentId as Id<"documents">,

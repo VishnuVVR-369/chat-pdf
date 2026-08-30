@@ -1,0 +1,56 @@
+{
+  "version": "1.0.0",
+  "downloadedAt": "2026-08-29",
+  "documents": [
+    {
+      "key": "nist-ai-rmf-1.0",
+      "title": "Artificial Intelligence Risk Management Framework (AI RMF 1.0)",
+      "filename": "nist-ai-rmf-1.0.pdf",
+      "sourceUrl": "https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.100-1.pdf",
+      "publicationDate": "2023-01-26",
+      "pageCount": 48,
+      "sizeBytes": 1946127,
+      "sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1"
+    },
+    {
+      "key": "nist-csf-2.0",
+      "title": "The NIST Cybersecurity Framework (CSF) 2.0",
+      "filename": "nist-csf-2.0.pdf",
+      "sourceUrl": "https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf",
+      "publicationDate": "2024-02-26",
+      "pageCount": 32,
+      "sizeBytes": 1518858,
+      "sha256": "3c31f46fee98cac0c4323453e5109291a213b4de7fef8c058af9bf67f717433c"
+    },
+    {
+      "key": "cisa-zero-trust-maturity-model-2.0",
+      "title": "Zero Trust Maturity Model Version 2.0",
+      "filename": "cisa-zero-trust-maturity-model-2.0.pdf",
+      "sourceUrl": "https://www.cisa.gov/sites/default/files/2023-04/zero_trust_maturity_model_v2_508.pdf",
+      "publicationDate": "2023-04-01",
+      "pageCount": 32,
+      "sizeBytes": 1466397,
+      "sha256": "4a95fdff55a64e2468b69af075b7f208176b88c751af92aefc3b7dacad26fdb4"
+    },
+    {
+      "key": "federal-reserve-economic-well-being-2024",
+      "title": "Economic Well-Being of U.S. Households in 2024",
+      "filename": "federal-reserve-economic-well-being-2024.pdf",
+      "sourceUrl": "https://www.federalreserve.gov/publications/files/2024-report-economic-well-being-us-households-202505.pdf",
+      "publicationDate": "2025-05-28",
+      "pageCount": 90,
+      "sizeBytes": 2483939,
+      "sha256": "b8c2cd0760c301ab167837b34710f6f299436e483511d3f90699fd6f611e916c"
+    },
+    {
+      "key": "omb-circular-a-123-2026",
+      "title": "OMB Circular No. A-123: Management's Responsibility for Internal Control",
+      "filename": "omb-circular-a-123-2026.pdf",
+      "sourceUrl": "https://www.whitehouse.gov/wp-content/uploads/2026/03/OMB-Circular-No.-A-123-2026.pdf",
+      "publicationDate": "2026-03-10",
+      "pageCount": 35,
+      "sizeBytes": 541255,
+      "sha256": "0641e25614101be7948b41a53a7adc113746af097ecb11f476dacdede312c159"
+    }
+  ]
+}
